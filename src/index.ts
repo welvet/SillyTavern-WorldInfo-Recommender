@@ -124,12 +124,12 @@ async function handleUIChanges(): Promise<void> {
     charCardCheckbox.prop('checked', settings.contextToSend.charCard);
     authorNoteCheckbox.prop('checked', settings.contextToSend.authorNote);
     worldInfoCheckbox.prop('checked', settings.contextToSend.worldInfo);
-    let selectedWorldNames: string[] = [];
     const entriesGroupByWorldName = await getActiveWorldInfo(['all'], this_chid);
-    selectedWorldNames = Object.keys(entriesGroupByWorldName);
+    const allWorldNames = Object.keys(entriesGroupByWorldName);
+    let selectedWorldNames = structuredClone(allWorldNames);
     buildFancyDropdown('#worldInfoRecommend_worldInfoContainer', {
       label: 'World Info',
-      initialList: Object.keys(entriesGroupByWorldName),
+      initialList: allWorldNames,
       initialValues: selectedWorldNames,
       onSelectChange(_previousValues, newValues) {
         selectedWorldNames = newValues;
@@ -351,7 +351,7 @@ async function handleUIChanges(): Promise<void> {
           });
         }
         if (settings.contextToSend.worldInfo) {
-          if (Object.keys(entriesGroupByWorldName).length > 0) {
+          if (allWorldNames.length > 0) {
             let worldInfoPrompt = '';
             Object.entries(entriesGroupByWorldName).forEach(([worldName, entries]) => {
               if (!selectedWorldNames.includes(worldName)) {
@@ -546,12 +546,9 @@ async function handleUIChanges(): Promise<void> {
               const div = document.createElement('div');
               const selectElement = document.createElement('select');
               selectElement.id = 'worldInfoRecommend_worldSelection';
-              Object.keys(entriesGroupByWorldName).forEach((worldName) => {
-                if (!selectedWorldNames.includes(worldName)) {
-                  return;
-                }
+              allWorldNames.forEach((worldName) => {
                 const option = document.createElement('option');
-                option.value = selectedWorldNames.indexOf(worldName).toString();
+                option.value = allWorldNames.indexOf(worldName).toString();
                 option.text = worldName;
                 selectElement.appendChild(option);
               });
@@ -562,9 +559,9 @@ async function handleUIChanges(): Promise<void> {
 
               let result = globalContext.callGenericPopup($(div).html(), POPUP_TYPE.CONFIRM);
               const addedSelectElement = $('#worldInfoRecommend_worldSelection');
-              addedSelectElement.val(lastSelectedWorldName ? selectedWorldNames.indexOf(lastSelectedWorldName) : 0);
+              addedSelectElement.val(lastSelectedWorldName ? allWorldNames.indexOf(lastSelectedWorldName) : 0);
               addedSelectElement.on('change', () => {
-                selectedWorld = selectedWorldNames[parseInt((addedSelectElement.val() as string) ?? '0')];
+                selectedWorld = allWorldNames[parseInt((addedSelectElement.val() as string) ?? '0')];
               });
               // @ts-ignore
               result = await result;
