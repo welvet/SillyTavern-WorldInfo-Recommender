@@ -1,4 +1,10 @@
-import { buildPrompt, BuildPromptOptions, ExtensionSettingsManager, getActiveWorldInfo } from 'sillytavern-utils-lib';
+import {
+  buildFancyDropdown,
+  buildPrompt,
+  BuildPromptOptions,
+  ExtensionSettingsManager,
+  getActiveWorldInfo,
+} from 'sillytavern-utils-lib';
 import {
   selected_group,
   st_createWorldInfoEntry,
@@ -118,6 +124,17 @@ async function handleUIChanges(): Promise<void> {
     charCardCheckbox.prop('checked', settings.contextToSend.charCard);
     authorNoteCheckbox.prop('checked', settings.contextToSend.authorNote);
     worldInfoCheckbox.prop('checked', settings.contextToSend.worldInfo);
+    let selectedWorldNames: string[] = [];
+    const entriesGroupByWorldName = await getActiveWorldInfo(['all'], this_chid);
+    selectedWorldNames = Object.keys(entriesGroupByWorldName);
+    buildFancyDropdown('#worldInfoRecommend_worldInfoContainer', {
+      label: 'World Info',
+      initialList: Object.keys(entriesGroupByWorldName),
+      initialValues: selectedWorldNames,
+      onSelectChange(_previousValues, newValues) {
+        selectedWorldNames = newValues;
+      },
+    });
 
     // Set up message options
     const messageTypeSelect = messagesContainer.find('#messageType');
@@ -333,12 +350,13 @@ async function handleUIChanges(): Promise<void> {
             content: DEFAULT_ST_DESCRIPTION,
           });
         }
-
-        const entriesGroupByWorldName = await getActiveWorldInfo(['all'], this_chid);
         if (settings.contextToSend.worldInfo) {
           if (Object.keys(entriesGroupByWorldName).length > 0) {
             let worldInfoPrompt = '';
             Object.entries(entriesGroupByWorldName).forEach(([worldName, entries]) => {
+              if (!selectedWorldNames.includes(worldName)) {
+                return;
+              }
               if (entries.length > 0) {
                 worldInfoPrompt += `# WORLD NAME: ${worldName}\n`;
                 entries.forEach((entry) => {
@@ -411,6 +429,9 @@ async function handleUIChanges(): Promise<void> {
         }
         // Set "key" and "comment" if missing
         Object.entries(entries).forEach(([worldName, entries]) => {
+          if (!entriesGroupByWorldName[worldName]) {
+            return;
+          }
           entries.forEach((entry) => {
             const existentWI = entriesGroupByWorldName[worldName]?.find((e) => e.uid === entry.uid);
             if (existentWI) {
@@ -525,11 +546,15 @@ async function handleUIChanges(): Promise<void> {
               const selectElement = document.createElement('select');
               selectElement.id = 'worldInfoRecommend_worldSelection';
               Object.keys(entriesGroupByWorldName).forEach((worldName) => {
+                if (!selectedWorldNames.includes(worldName)) {
+                  return;
+                }
                 const option = document.createElement('option');
                 option.value = worldName;
                 option.text = worldName;
                 selectElement.appendChild(option);
               });
+              div.appendChild(document.createTextNode('Select world: '));
               div.appendChild(selectElement);
 
               let result = globalContext.callGenericPopup($(div).html(), POPUP_TYPE.CONFIRM);
