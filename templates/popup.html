@@ -80,75 +80,17 @@
                     placeholder="e.g., 'Suggest entries for places {{user}} visited.' or 'Edit the coffee shop entry...'"
                     rows="4"
                 ></textarea>
-                <button id="worldInfoRecommend_sendPrompt" style="width: unset" class="menu_button interactable">
-                    Send Prompt
-                </button>
+                <button id="worldInfoRecommend_sendPrompt" class="menu_button interactable">Send Prompt</button>
             </div>
         </div>
 
         <div class="wide-column">
             <div class="card">
                 <h3>Suggested Entries</h3>
-
                 <div id="worldInfoRecommend_suggestedEntries"></div>
-            </div>
-
-            <div class="card">
-                <h3>Current Lorebook</h3>
-
-                <div id="worldInfoRecommend_currentEntries"></div>
             </div>
         </div>
     </div>
-    <style>
-        body {
-            margin: 0;
-            padding: 2%;
-        }
-
-        .container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 2%;
-            width: 100%;
-        }
-
-        .card {
-            border: 1px solid;
-            border-radius: 10px;
-            padding: 2%;
-            margin-bottom: 2%;
-        }
-
-        .column {
-            width: 28%;
-            margin-bottom: 2%;
-        }
-
-        .wide-column {
-            width: 62%;
-        }
-
-        .entry {
-            border: 1px solid;
-            border-radius: 8px;
-            padding: 2%;
-            margin-bottom: 2%;
-            position: relative;
-        }
-        .entry .menu {
-            display: flex;
-            justify-content: flex-end;
-            flex-direction: row;
-        }
-
-        @media (max-width: 768px) {
-            .column,
-            .wide-column {
-                width: 96%;
-            }
-        }
-    </style>
 
     <template id="worldInfoRecommend_entryTemplate">
         <div class="entry">
