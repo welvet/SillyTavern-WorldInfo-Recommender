@@ -136,6 +136,11 @@
             margin-bottom: 2%;
             position: relative;
         }
+        .entry .menu {
+            display: flex;
+            justify-content: flex-end;
+            flex-direction: row;
+        }
 
         @media (max-width: 768px) {
             .column,
@@ -147,9 +152,13 @@
 
     <template id="worldInfoRecommend_entryTemplate">
         <div class="entry">
-            <button class="menu_button interactable">Add</button>
+            <div class="menu">
+                <button class="menu_button interactable add">Add</button>
+                <button class="menu_button interactable blacklist">Blacklist</button>
+                <button class="menu_button interactable remove">Remove</button>
+            </div>
             <h4 class="comment">{{comment}}</h4>
-            <div class="key">Triggers: {{key}}</div>
+            <div class="key">{{key}}</div>
             <p class="content">{{content}}</p>
         </div>
     </template>

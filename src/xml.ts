@@ -18,30 +18,48 @@ If you are updating an existing entry you should specify the id of the entry. Li
 <lorebooks>
     <entry>
         <worldName>World 1</worldName>
-        <id>1</id>
+        <id>15</id> // Id should be the id of the entry
+        <name>Book 1</name>
+        <triggers>word1,word2</triggers>
         <content>Content of book 1</content>
     </entry>
 </lorebooks>
 \`\`\`
+
+Don't suggest already existing or suggested entries.
 `;
 
 const parser = new XMLParser();
+
+function createRandomNumber(length: number): number {
+  const min = Math.pow(10, length - 1);
+  const max = Math.pow(10, length) - 1;
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
 
 export function parseXMLOwn(xml: string): Record<string, WIEntry[]> {
   // Remove code blocks
   const xmlWithoutCodeBlocks = xml.replace(/```xml/g, '').replace(/```/g, '');
 
   const entriesByWorldName: Record<string, WIEntry[]> = {};
-  const entries = parser.parse(xmlWithoutCodeBlocks);
+  const rawResponse = parser.parse(xmlWithoutCodeBlocks);
+  console.log('Raw response', rawResponse);
+  if (!rawResponse.lorebooks) {
+    return entriesByWorldName;
+  }
 
-  for (const entry of entries.lorebooks.entry) {
+  const entries = rawResponse.lorebooks.entry?.content ? [rawResponse.lorebooks.entry] : rawResponse.lorebooks.entry;
+  for (const entry of entries) {
     const worldName = entry.worldName;
+    if (!worldName) {
+      continue;
+    }
     if (!entriesByWorldName[worldName]) {
       entriesByWorldName[worldName] = [];
     }
     entriesByWorldName[worldName].push({
-      uid: entry.id ?? -1,
-      key: entry.triggers.split(','),
+      uid: entry.id ?? createRandomNumber(6),
+      key: entry.triggers?.split(',').map((t: string) => t.trim()) ?? [],
       content: entry.content,
       comment: entry.name,
     });
