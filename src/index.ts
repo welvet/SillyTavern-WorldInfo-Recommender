@@ -51,6 +51,8 @@ interface ExtensionSettings {
   maxContextValue: number;
   maxResponseToken: number;
   contextToSend: ContextToSend;
+  stWorldInfoPrompt: string;
+  responseRulesPrompt: string;
 }
 
 const DEFAULT_SETTINGS: ExtensionSettings = {
@@ -75,19 +77,62 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
     authorNote: true,
     worldInfo: true,
   },
+  stWorldInfoPrompt: DEFAULT_ST_DESCRIPTION,
+  responseRulesPrompt: DEFAULT_XML_DESCRIPTION,
 };
 
 const settingsManager = new ExtensionSettingsManager<ExtensionSettings>(KEYS.EXTENSION, DEFAULT_SETTINGS);
 
 async function handleUIChanges(): Promise<void> {
-  // const settingsHtml: string = await globalContext.renderExtensionTemplateAsync(
-  //   `third-party/${extensionName}`,
-  //   'templates/settings',
-  // );
-  // $('#extensions_settings').append(settingsHtml);
+  const settingsHtml: string = await globalContext.renderExtensionTemplateAsync(
+    `third-party/${extensionName}`,
+    'templates/settings',
+  );
+  $('#extensions_settings').append(settingsHtml);
 
-  // const settingsContainer = $('.worldInfoRecommender_settings');
-  // const settings = settingsManager.getSettings();
+  const settingsContainer = $('.worldInfoRecommender_settings');
+  const settings = settingsManager.getSettings();
+
+  const stWorldInfoPromptContainer = settingsContainer.find('.stWorldInfoPrompt');
+  const stWorldInfoPromptContainerTextarea = stWorldInfoPromptContainer.find('textarea');
+
+  const responseRulesPromptContainer = settingsContainer.find('.responseRulesPrompt');
+  const responseRulesPromptContainerTextarea = responseRulesPromptContainer.find('textarea');
+
+  stWorldInfoPromptContainerTextarea.val(settings.stWorldInfoPrompt);
+  responseRulesPromptContainerTextarea.val(settings.responseRulesPrompt);
+
+  stWorldInfoPromptContainer.find('.restore_default').on('click', async () => {
+    const confirm = await globalContext.Popup.show.confirm(
+      'Are you sure you want to restore the default ST/World Info description?',
+      'World Info Recommender',
+    );
+    if (!confirm) {
+      return;
+    }
+    stWorldInfoPromptContainerTextarea.val(DEFAULT_ST_DESCRIPTION);
+    stWorldInfoPromptContainerTextarea.trigger('change');
+  });
+  responseRulesPromptContainer.find('.restore_default').on('click', async () => {
+    const confirm = await globalContext.Popup.show.confirm(
+      'Are you sure you want to restore the default response rules?',
+      'World Info Recommender',
+    );
+    if (!confirm) {
+      return;
+    }
+    responseRulesPromptContainerTextarea.val(DEFAULT_XML_DESCRIPTION);
+    responseRulesPromptContainerTextarea.trigger('change');
+  });
+
+  stWorldInfoPromptContainerTextarea.on('change', () => {
+    settings.stWorldInfoPrompt = stWorldInfoPromptContainerTextarea.val() ?? '';
+    settingsManager.saveSettings();
+  });
+  responseRulesPromptContainerTextarea.on('change', () => {
+    settings.responseRulesPrompt = responseRulesPromptContainerTextarea.val() ?? '';
+    settingsManager.saveSettings();
+  });
 
   const popupIconHtml = `<div class="menu_button fa-brands fa-wpexplorer interactable" title="World Info Recommender"></div>`;
   const popupIcon = $(popupIconHtml);
@@ -102,8 +147,7 @@ async function handleUIChanges(): Promise<void> {
       wide: true,
     });
 
-    const settings = settingsManager.getSettings();
-    const container = $('#worldInfoRecommenderPopup');
+    const popupContainer = $('#worldInfoRecommenderPopup');
 
     globalContext.ConnectionManagerRequestService.handleDropdown(
       '#worldInfoRecommenderPopup #worldInfoRecommend_connectionProfile',
@@ -114,11 +158,11 @@ async function handleUIChanges(): Promise<void> {
       },
     );
 
-    const stDescriptionCheckbox = container.find('#worldInfoRecommend_stDescription');
-    const messagesContainer = container.find('.message-options');
-    const charCardCheckbox = container.find('#worldInfoRecommend_charCard');
-    const authorNoteCheckbox = container.find('#worldInfoRecommend_authorNote');
-    const worldInfoCheckbox = container.find('#worldInfoRecommend_worldInfo');
+    const stDescriptionCheckbox = popupContainer.find('#worldInfoRecommend_stDescription');
+    const messagesContainer = popupContainer.find('.message-options');
+    const charCardCheckbox = popupContainer.find('#worldInfoRecommend_charCard');
+    const authorNoteCheckbox = popupContainer.find('#worldInfoRecommend_authorNote');
+    const worldInfoCheckbox = popupContainer.find('#worldInfoRecommend_worldInfo');
 
     stDescriptionCheckbox.prop('checked', settings.contextToSend.stDescription);
     charCardCheckbox.prop('checked', settings.contextToSend.charCard);
@@ -228,8 +272,8 @@ async function handleUIChanges(): Promise<void> {
       settingsManager.saveSettings();
     });
 
-    const maxContextType = container.find('#worldInfoRecommend_maxContextType');
-    const maxTokensContainer = container.find('#worldInfoRecommend_maxTokens_container');
+    const maxContextType = popupContainer.find('#worldInfoRecommend_maxContextType');
+    const maxTokensContainer = popupContainer.find('#worldInfoRecommend_maxTokens_container');
     maxContextType.val(settings.maxContextType);
     maxTokensContainer.css('display', settings.maxContextType === 'custom' ? 'block' : 'none');
     maxContextType.on('change', () => {
@@ -243,7 +287,7 @@ async function handleUIChanges(): Promise<void> {
       }
     });
 
-    const maxTokens = container.find('#worldInfoRecommend_maxTokens');
+    const maxTokens = popupContainer.find('#worldInfoRecommend_maxTokens');
     maxTokens.val(settings.maxContextValue);
     maxTokens.on('change', () => {
       const value = maxTokens.val() as number;
@@ -251,7 +295,7 @@ async function handleUIChanges(): Promise<void> {
       settingsManager.saveSettings();
     });
 
-    const maxResponseTokens = container.find('#worldInfoRecommend_maxResponseTokens');
+    const maxResponseTokens = popupContainer.find('#worldInfoRecommend_maxResponseTokens');
     maxResponseTokens.val(settings.maxResponseToken);
     maxResponseTokens.on('change', () => {
       const value = maxResponseTokens.val() as number;
@@ -261,7 +305,7 @@ async function handleUIChanges(): Promise<void> {
 
     let suggestedEntries: Record<string, WIEntry[]> = {};
     const blackListedEntries: string[] = [];
-    const sendButton = container.find('#worldInfoRecommend_sendPrompt');
+    const sendButton = popupContainer.find('#worldInfoRecommend_sendPrompt');
     sendButton.on('click', async () => {
       try {
         sendButton.prop('disabled', true);
@@ -276,7 +320,7 @@ async function handleUIChanges(): Promise<void> {
           return;
         }
 
-        let prompt = container.find('#worldInfoRecommend_prompt').val() as string;
+        let prompt = popupContainer.find('#worldInfoRecommend_prompt').val() as string;
         if (!prompt) {
           return;
         }
@@ -347,7 +391,7 @@ async function handleUIChanges(): Promise<void> {
         if (settings.contextToSend.stDescription) {
           messages.push({
             role: 'system',
-            content: DEFAULT_ST_DESCRIPTION,
+            content: settings.stWorldInfoPrompt,
           });
         }
         if (settings.contextToSend.worldInfo) {
@@ -410,7 +454,7 @@ async function handleUIChanges(): Promise<void> {
           }
         }
 
-        const userPrompt = `${DEFAULT_XML_DESCRIPTION}\n\n${prompt}`;
+        const userPrompt = `${settings.responseRulesPrompt}\n\n${prompt}`;
         messages.push({
           role: 'user',
           content: userPrompt,
@@ -446,8 +490,8 @@ async function handleUIChanges(): Promise<void> {
         });
         console.log(entries);
 
-        const suggestedEntriesContainer = container.find('#worldInfoRecommend_suggestedEntries');
-        const entryTemplate = container.find('#worldInfoRecommend_entryTemplate');
+        const suggestedEntriesContainer = popupContainer.find('#worldInfoRecommend_suggestedEntries');
+        const entryTemplate = popupContainer.find('#worldInfoRecommend_entryTemplate');
         if (!entryTemplate) {
           return;
         }

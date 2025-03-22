@@ -26,8 +26,7 @@ If you are updating an existing entry you should specify the id of the entry. Li
 </lorebooks>
 \`\`\`
 
-Don't suggest already existing or suggested entries.
-`;
+- Don't suggest already existing or suggested entries.`;
 
 const parser = new XMLParser();
 
