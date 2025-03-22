@@ -90,48 +90,13 @@
             <div class="card">
                 <h3>Suggested Entries</h3>
 
-                <div class="entry">
-                    <button class="menu_button interactable">Add</button>
-                    <h4>The Apartment</h4>
-                    <div>Triggers: apartment, home, {{user}}'s place</div>
-                    <p>
-                        A cozy, slightly messy apartment where {{user}} lives. Contains a worn sofa and a window
-                        overlooking the city.
-                    </p>
-                </div>
-
-                <div class="entry">
-                    <button class="menu_button interactable">Add</button>
-                    <h4>Downtown Coffee Shop</h4>
-                    <div>Triggers: coffee, cafe, shop, espresso</div>
-                    <p>
-                        A bustling coffee shop with a bright red sign, known for its strong espresso and flaky pastries.
-                        A common meeting spot.
-                    </p>
-                </div>
-
-                <div class="entry">
-                    <button class="menu_button interactable">Add</button>
-                    <h4>Old Library</h4>
-                    <div>Triggers: library, books, archives</div>
-                    <p>
-                        A quiet, dusty library filled with ancient tomes. The air smells of old paper and forgotten
-                        knowledge.
-                    </p>
-                </div>
+                <div id="worldInfoRecommend_suggestedEntries"></div>
             </div>
 
             <div class="card">
                 <h3>Current Lorebook</h3>
 
-                <div class="entry">
-                    <h4>The Apartment</h4>
-                    <div>Triggers: apartment, home, {{user}}'s place</div>
-                    <p>
-                        A cozy, slightly messy apartment where {{user}} lives. Contains a worn sofa and a window
-                        overlooking the city.
-                    </p>
-                </div>
+                <div id="worldInfoRecommend_currentEntries"></div>
             </div>
         </div>
     </div>
@@ -179,4 +144,13 @@
             }
         }
     </style>
+
+    <template id="worldInfoRecommend_entryTemplate">
+        <div class="entry">
+            <button class="menu_button interactable">Add</button>
+            <h4 class="comment">{{comment}}</h4>
+            <div class="key">Triggers: {{key}}</div>
+            <p class="content">{{content}}</p>
+        </div>
+    </template>
 </div>

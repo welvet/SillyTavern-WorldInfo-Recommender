@@ -3,7 +3,7 @@ import { selected_group, st_echo, this_chid } from 'sillytavern-utils-lib/config
 import { ChatCompletionMessage, ExtractedData } from 'sillytavern-utils-lib/types';
 import { POPUP_TYPE } from 'sillytavern-utils-lib/types/popup';
 import { DEFAULT_ST_DESCRIPTION } from './constants.js';
-import { DEFAULT_XML_DESCRIPTION } from './xml.js';
+import { DEFAULT_XML_DESCRIPTION, parseXMLOwn } from './xml.js';
 
 const extensionName = 'SillyTavern-WorldInfo-Recommender';
 const VERSION = '0.1.0';
@@ -236,6 +236,25 @@ async function handleUIChanges(): Promise<void> {
         settings.maxResponseToken,
       )) as ExtractedData;
       console.log(response.content);
+      const entries = parseXMLOwn(response.content);
+      console.log(entries);
+
+      const suggestedEntriesContainer = container.find('#worldInfoRecommend_suggestedEntries');
+      const entryTemplate = container.find('#worldInfoRecommend_entryTemplate');
+      if (!entryTemplate) {
+        return;
+      }
+      suggestedEntriesContainer.empty();
+      Object.entries(entries).forEach(([worldName, entries]) => {
+        entries.forEach((entry) => {
+          const cloneNode = $(entryTemplate.html());
+          cloneNode.find('.worldName').text(worldName);
+          cloneNode.find('.comment').text(entry.comment);
+          cloneNode.find('.key').text(entry.key.join(', '));
+          cloneNode.find('.content').text(entry.content);
+          suggestedEntriesContainer.append(cloneNode);
+        });
+      });
     });
   });
 }
