@@ -1,4 +1,4 @@
-import { buildPrompt, ExtensionSettingsManager, getAllWorldInfo } from 'sillytavern-utils-lib';
+import { buildPrompt, ExtensionSettingsManager, getActiveWorldInfo } from 'sillytavern-utils-lib';
 import {
   selected_group,
   st_createWorldInfoEntry,
@@ -185,8 +185,11 @@ async function handleUIChanges(): Promise<void> {
         const messages: ChatCompletionMessage[] = [];
         if (settings.contextToSend.lastMessages) {
           const selectedApi = profile.api ? globalContext.CONNECT_API_MAP[profile.api].selected : undefined;
+          if (!selectedApi) {
+            return;
+          }
           messages.push(
-            ...(await buildPrompt(selectedApi, undefined, undefined, {
+            ...(await buildPrompt(selectedApi, {
               presetName: profile.preset,
               contextName: profile.context,
               instructName: profile.instruct,
@@ -212,7 +215,7 @@ async function handleUIChanges(): Promise<void> {
           });
         }
 
-        const entriesGroupByWorldName = await getAllWorldInfo(['all'], this_chid);
+        const entriesGroupByWorldName = await getActiveWorldInfo(['all'], this_chid);
         if (settings.contextToSend.worldInfo) {
           if (Object.keys(entriesGroupByWorldName).length > 0) {
             let worldInfoPrompt = '';
