@@ -19,10 +19,65 @@
                         <input type="checkbox" id="worldInfoRecommend_stDescription" />
                         Description of SillyTavern and Lorebook
                     </label>
-                    <label class="checkbox_label" for="worldInfoRecommend_lastMessages">
-                        <input type="checkbox" id="worldInfoRecommend_lastMessages" />
-                        Last Messages
-                    </label>
+                    <div class="message-options">
+                        <h4>Messages to Include</h4>
+                        <select id="messageType" class="text_pole">
+                            <option value="none">None</option>
+                            <option value="all">All Messages</option>
+                            <option value="first">First X Messages</option>
+                            <option value="last">Last X Messages</option>
+                            <option value="range">Range</option>
+                        </select>
+
+                        <div id="firstX" style="display: none; margin-top: 10px">
+                            <label
+                                >First
+                                <input
+                                    type="number"
+                                    class="text_pole small message-input"
+                                    id="firstXMessages"
+                                    min="1"
+                                    placeholder="X"
+                                />
+                                Messages
+                            </label>
+                        </div>
+
+                        <div id="lastX" style="display: none; margin-top: 10px">
+                            <label
+                                >Last
+                                <input
+                                    type="number"
+                                    class="text_pole small message-input"
+                                    id="lastXMessages"
+                                    min="1"
+                                    placeholder="X"
+                                />
+                                Messages
+                            </label>
+                        </div>
+
+                        <div id="rangeX" style="display: none; margin-top: 10px">
+                            <label
+                                >Range:
+                                <input
+                                    type="number"
+                                    class="text_pole small message-input"
+                                    id="rangeStart"
+                                    min="0"
+                                    placeholder="Start"
+                                />
+                                to
+                                <input
+                                    type="number"
+                                    class="text_pole small message-input"
+                                    id="rangeEnd"
+                                    min="1"
+                                    placeholder="End"
+                                />
+                            </label>
+                        </div>
+                    </div>
                     <label class="checkbox_label" for="worldInfoRecommend_charCard">
                         <input type="checkbox" id="worldInfoRecommend_charCard" />
                         Char Card

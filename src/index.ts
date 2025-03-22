@@ -1,4 +1,4 @@
-import { buildPrompt, ExtensionSettingsManager, getActiveWorldInfo } from 'sillytavern-utils-lib';
+import { buildPrompt, BuildPromptOptions, ExtensionSettingsManager, getActiveWorldInfo } from 'sillytavern-utils-lib';
 import {
   selected_group,
   st_createWorldInfoEntry,
@@ -23,7 +23,15 @@ const KEYS = {
 
 interface ContextToSend {
   stDescription: boolean;
-  lastMessages: boolean;
+  messages: {
+    type: 'none' | 'all' | 'first' | 'last' | 'range';
+    first?: number;
+    last?: number;
+    range?: {
+      start: number;
+      end: number;
+    };
+  };
   charCard: boolean;
   authorNote: boolean;
   worldInfo: boolean;
@@ -48,7 +56,15 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
   maxResponseToken: 1024,
   contextToSend: {
     stDescription: true,
-    lastMessages: true,
+    messages: {
+      type: 'all',
+      first: 10,
+      last: 10,
+      range: {
+        start: 0,
+        end: 10,
+      },
+    },
     charCard: true,
     authorNote: true,
     worldInfo: true,
@@ -93,23 +109,39 @@ async function handleUIChanges(): Promise<void> {
     );
 
     const stDescriptionCheckbox = container.find('#worldInfoRecommend_stDescription');
-    const lastMessagesCheckbox = container.find('#worldInfoRecommend_lastMessages');
+    const messagesContainer = container.find('.message-options');
     const charCardCheckbox = container.find('#worldInfoRecommend_charCard');
     const authorNoteCheckbox = container.find('#worldInfoRecommend_authorNote');
     const worldInfoCheckbox = container.find('#worldInfoRecommend_worldInfo');
 
     stDescriptionCheckbox.prop('checked', settings.contextToSend.stDescription);
-    lastMessagesCheckbox.prop('checked', settings.contextToSend.lastMessages);
     charCardCheckbox.prop('checked', settings.contextToSend.charCard);
     authorNoteCheckbox.prop('checked', settings.contextToSend.authorNote);
     worldInfoCheckbox.prop('checked', settings.contextToSend.worldInfo);
 
+    // Set up message options
+    const messageTypeSelect = messagesContainer.find('#messageType');
+    const firstXDiv = messagesContainer.find('#firstX');
+    const lastXDiv = messagesContainer.find('#lastX');
+    const rangeXDiv = messagesContainer.find('#rangeX');
+    const firstXInput = messagesContainer.find('#firstXMessages');
+    const lastXInput = messagesContainer.find('#lastXMessages');
+    const rangeStartInput = messagesContainer.find('#rangeStart');
+    const rangeEndInput = messagesContainer.find('#rangeEnd');
+
+    // Initialize values
+    messageTypeSelect.val(settings.contextToSend.messages.type);
+    firstXInput.val(settings.contextToSend.messages.first ?? 10);
+    lastXInput.val(settings.contextToSend.messages.last ?? 10);
+    rangeStartInput.val(settings.contextToSend.messages.range?.start ?? 0);
+    rangeEndInput.val(settings.contextToSend.messages.range?.end ?? 10);
+
+    // Show/hide appropriate div based on initial type
+    updateMessageInputVisibility(settings.contextToSend.messages.type);
+
+    // Event handlers
     stDescriptionCheckbox.on('change', () => {
       settings.contextToSend.stDescription = stDescriptionCheckbox.prop('checked');
-      settingsManager.saveSettings();
-    });
-    lastMessagesCheckbox.on('change', () => {
-      settings.contextToSend.lastMessages = lastMessagesCheckbox.prop('checked');
       settingsManager.saveSettings();
     });
     charCardCheckbox.on('change', () => {
@@ -122,6 +154,60 @@ async function handleUIChanges(): Promise<void> {
     });
     worldInfoCheckbox.on('change', () => {
       settings.contextToSend.worldInfo = worldInfoCheckbox.prop('checked');
+      settingsManager.saveSettings();
+    });
+
+    function updateMessageInputVisibility(type: 'none' | 'all' | 'first' | 'last' | 'range') {
+      firstXDiv.hide();
+      lastXDiv.hide();
+      rangeXDiv.hide();
+
+      switch (type) {
+        case 'first':
+          firstXDiv.show();
+          break;
+        case 'last':
+          lastXDiv.show();
+          break;
+        case 'range':
+          rangeXDiv.show();
+          break;
+        case 'none':
+        case 'all':
+          break;
+      }
+    }
+
+    messageTypeSelect.on('change', () => {
+      const type = messageTypeSelect.val() as 'all' | 'first' | 'last' | 'range';
+      settings.contextToSend.messages.type = type;
+      settingsManager.saveSettings();
+      updateMessageInputVisibility(type);
+    });
+
+    firstXInput.on('change', () => {
+      settings.contextToSend.messages.first = parseInt(firstXInput.val() as string) || 10;
+      settingsManager.saveSettings();
+    });
+
+    lastXInput.on('change', () => {
+      settings.contextToSend.messages.last = parseInt(lastXInput.val() as string) || 10;
+      settingsManager.saveSettings();
+    });
+
+    rangeStartInput.on('change', () => {
+      if (!settings.contextToSend.messages.range) {
+        settings.contextToSend.messages.range = { start: 0, end: 10 };
+      }
+      settings.contextToSend.messages.range.start = parseInt(rangeStartInput.val() as string) || 0;
+      settingsManager.saveSettings();
+    });
+
+    rangeEndInput.on('change', () => {
+      if (!settings.contextToSend.messages.range) {
+        settings.contextToSend.messages.range = { start: 0, end: 10 };
+      }
+      settings.contextToSend.messages.range.end = parseInt(rangeEndInput.val() as string) || 10;
       settingsManager.saveSettings();
     });
 
@@ -183,30 +269,63 @@ async function handleUIChanges(): Promise<void> {
         }
 
         const messages: ChatCompletionMessage[] = [];
-        if (settings.contextToSend.lastMessages) {
-          const selectedApi = profile.api ? globalContext.CONNECT_API_MAP[profile.api].selected : undefined;
-          if (!selectedApi) {
-            return;
-          }
-          messages.push(
-            ...(await buildPrompt(selectedApi, {
-              presetName: profile.preset,
-              contextName: profile.context,
-              instructName: profile.instruct,
-              syspromptName: profile.sysprompt,
-              ignoreCharacterFields: !!settings.contextToSend.charCard,
-              ignoreWorldInfo: true, // We don't need triggered world info here
-              ignoreAuthorNote: !!settings.contextToSend.authorNote,
-              maxContext:
-                settings.maxContextType === 'custom'
-                  ? settings.maxContextValue
-                  : settings.maxContextType === 'profile'
-                    ? 'preset'
-                    : 'active',
-              includeNames: !!selected_group,
-            })),
-          );
+        const selectedApi = profile.api ? globalContext.CONNECT_API_MAP[profile.api].selected : undefined;
+        if (!selectedApi) {
+          return;
         }
+
+        const buildPromptOptions: BuildPromptOptions = {
+          presetName: profile.preset,
+          contextName: profile.context,
+          instructName: profile.instruct,
+          syspromptName: profile.sysprompt,
+          ignoreCharacterFields: !settings.contextToSend.charCard,
+          ignoreWorldInfo: true, // We don't need triggered world info here
+          ignoreAuthorNote: !settings.contextToSend.authorNote,
+          maxContext:
+            settings.maxContextType === 'custom'
+              ? settings.maxContextValue
+              : settings.maxContextType === 'profile'
+                ? 'preset'
+                : 'active',
+          includeNames: !!selected_group,
+        };
+
+        // Add message options based on selected type
+        switch (settings.contextToSend.messages.type) {
+          case 'none':
+            buildPromptOptions.messageIndexesBetween = {
+              start: -1,
+              end: -1,
+            };
+            break;
+          case 'first':
+            buildPromptOptions.messageIndexesBetween = {
+              start: 0,
+              end: settings.contextToSend.messages.first ?? 10,
+            };
+            break;
+          case 'last':
+            const lastCount = settings.contextToSend.messages.last ?? 10;
+            buildPromptOptions.messageIndexesBetween = {
+              end: -1, // -1 means from the end
+              start: -lastCount,
+            };
+            break;
+          case 'range':
+            if (settings.contextToSend.messages.range) {
+              buildPromptOptions.messageIndexesBetween = {
+                start: settings.contextToSend.messages.range.start,
+                end: settings.contextToSend.messages.range.end,
+              };
+            }
+            break;
+          case 'all':
+          default:
+            break;
+        }
+
+        messages.push(...(await buildPrompt(selectedApi, buildPromptOptions)));
 
         if (settings.contextToSend.stDescription) {
           messages.push({
