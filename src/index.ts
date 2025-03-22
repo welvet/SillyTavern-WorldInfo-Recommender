@@ -389,7 +389,7 @@ async function handleUIChanges(): Promise<void> {
           return;
         }
 
-        // World is not exist, user should select a world in popup
+        // If world doesn't exist, let user select one
         if (!entriesGroupByWorldName[worldName]) {
           let selectedWorld = '';
 
@@ -419,6 +419,8 @@ async function handleUIChanges(): Promise<void> {
           }
         }
 
+        const existingEntry = entriesGroupByWorldName[worldName]?.find((e) => e.uid === suggestedEntry.uid);
+
         remove(entry, false);
 
         const stFormat: { entries: Record<number, WIEntry> } = {
@@ -427,26 +429,37 @@ async function handleUIChanges(): Promise<void> {
         for (const entry of entriesGroupByWorldName[worldName]) {
           stFormat.entries[entry.uid] = entry;
         }
-        const values = Object.values(stFormat.entries);
-        const lastEntry = values.length > 0 ? values[values.length - 1] : undefined;
-        let newEntry = st_createWorldInfoEntry(worldName, stFormat);
-        if (!newEntry) {
-          st_echo('error', 'Failed to create world info entry');
-          return;
+
+        let targetEntry: WIEntry | undefined;
+        const isUpdate = !!existingEntry;
+
+        if (isUpdate) {
+          targetEntry = existingEntry;
+        } else {
+          const values = Object.values(stFormat.entries);
+          const lastEntry = values.length > 0 ? values[values.length - 1] : undefined;
+          targetEntry = st_createWorldInfoEntry(worldName, stFormat);
+          if (!targetEntry) {
+            st_echo('error', 'Failed to create world info entry');
+            return;
+          }
+
+          const newId = targetEntry.uid;
+          if (lastEntry) {
+            Object.assign(targetEntry, lastEntry);
+          }
+          targetEntry.uid = newId;
         }
 
-        let newId = newEntry.uid;
-        if (lastEntry) {
-          Object.assign(newEntry, lastEntry);
-        }
+        // Update entry properties
+        targetEntry.key = suggestedEntry.key;
+        targetEntry.content = suggestedEntry.content;
+        targetEntry.comment = suggestedEntry.comment;
 
-        newEntry.key = suggestedEntry.key;
-        newEntry.content = suggestedEntry.content;
-        newEntry.comment = suggestedEntry.comment;
-        newEntry.uid = newId;
+        // Save and update UI
         await globalContext.saveWorldInfo(worldName, stFormat);
-        st_updateEditor(newEntry.uid, $('#WorldInfo').is(':visible'), stFormat);
-        st_echo('success', 'Entry added');
+        st_updateEditor(targetEntry.uid, $('#WorldInfo').is(':visible'), stFormat);
+        st_echo('success', isUpdate ? 'Entry updated' : 'Entry added');
       });
     });
   });
