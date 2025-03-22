@@ -3,34 +3,82 @@
     <div class="container">
         <div class="column">
             <div class="card">
+                <h3>Connection Profile</h3>
+                <select
+                    id="worldInfoRecommend_connectionProfile"
+                    class="text_pole"
+                    title="Select a Connection Profile"
+                    data-i18n="[title]Select a Connection Profile"
+                ></select>
+            </div>
+
+            <div class="card">
                 <h3>Context to Send</h3>
-                <div style="margin-top: 10px; display: flex; flex-direction: column">
+                <div style="display: flex; flex-direction: column">
                     <label class="checkbox_label" for="worldInfoRecommend_lastMessages">
-                        <input type="checkbox" id="worldInfoRecommend_lastMessages" class="worldInfoRecommend_lastMessages" />
+                        <input type="checkbox" id="worldInfoRecommend_lastMessages" />
                         Last Messages
                     </label>
                     <label class="checkbox_label" for="worldInfoRecommend_charCard">
-                        <input type="checkbox" id="worldInfoRecommend_charCard" class="worldInfoRecommend_charCard" />
+                        <input type="checkbox" id="worldInfoRecommend_charCard" />
                         Char Card
                     </label>
                     <label class="checkbox_label" for="worldInfoRecommend_authorNote">
-                        <input type="checkbox" id="worldInfoRecommend_authorNote" class="worldInfoRecommend_authorNote" />
+                        <input type="checkbox" id="worldInfoRecommend_authorNote" />
                         Author Note
                     </label>
                     <label class="checkbox_label" for="worldInfoRecommend_worldInfo">
-                        <input type="checkbox" id="worldInfoRecommend_worldInfo" class="worldInfoRecommend_worldInfo" />
+                        <input type="checkbox" id="worldInfoRecommend_worldInfo" />
                         World Info
                     </label>
                 </div>
             </div>
 
             <div class="card">
+                <label>
+                    Max Context
+                    <select id="worldInfoRecommend_maxContextType" class="text_pole" title="Select Max Context Type">
+                        <option value="profile">Use profile preset</option>
+                        <option value="sampler">Use active preset in sampler settings</option>
+                        <option value="custom">Custom</option>
+                    </select>
+                </label>
+
+                <label id="worldInfoRecommend_maxTokens_container" style="display: none; margin-top: 10px">
+                    <input
+                        id="worldInfoRecommend_maxTokens"
+                        type="number"
+                        class="text_pole"
+                        min="1"
+                        step="1"
+                        placeholder="Enter max tokens"
+                    />
+                </label>
+
+                <label
+                    >Max Response Tokens
+                    <input
+                        id="worldInfoRecommend_maxResponseTokens"
+                        type="number"
+                        class="text_pole"
+                        min="1"
+                        step="1"
+                        placeholder="Enter max response tokens"
+                    />
+                </label>
+            </div>
+
+            <div class="card">
                 <h3>Your Prompt</h3>
                 <textarea
+                    id="worldInfoRecommend_prompt"
                     class="text_pole textarea_compact"
                     placeholder="e.g., 'Suggest entries for places {{user}} visited.' or 'Edit the coffee shop entry...'"
-                    rows="4"></textarea>
-                <button style="width: unset;" class="menu_button interactable">Send Prompt</button>
+                    rows="4"
+                ></textarea>
+                <button id="worldInfoRecommend_sendPrompt" style="width: unset" class="menu_button interactable">
+                    Send Prompt
+                </button>
             </div>
         </div>
 
@@ -42,24 +90,30 @@
                     <button class="menu_button interactable">Add</button>
                     <h4>The Apartment</h4>
                     <div>Triggers: apartment, home, {{user}}'s place</div>
-                    <p>A cozy, slightly messy apartment where {{user}} lives. Contains a worn sofa and a window
-                        overlooking the city.</p>
+                    <p>
+                        A cozy, slightly messy apartment where {{user}} lives. Contains a worn sofa and a window
+                        overlooking the city.
+                    </p>
                 </div>
 
                 <div class="entry">
                     <button class="menu_button interactable">Add</button>
                     <h4>Downtown Coffee Shop</h4>
                     <div>Triggers: coffee, cafe, shop, espresso</div>
-                    <p>A bustling coffee shop with a bright red sign, known for its strong espresso and flaky pastries.
-                        A common meeting spot.</p>
+                    <p>
+                        A bustling coffee shop with a bright red sign, known for its strong espresso and flaky pastries.
+                        A common meeting spot.
+                    </p>
                 </div>
 
                 <div class="entry">
                     <button class="menu_button interactable">Add</button>
                     <h4>Old Library</h4>
                     <div>Triggers: library, books, archives</div>
-                    <p>A quiet, dusty library filled with ancient tomes. The air smells of old paper and forgotten
-                        knowledge.</p>
+                    <p>
+                        A quiet, dusty library filled with ancient tomes. The air smells of old paper and forgotten
+                        knowledge.
+                    </p>
                 </div>
             </div>
 
@@ -69,8 +123,10 @@
                 <div class="entry">
                     <h4>The Apartment</h4>
                     <div>Triggers: apartment, home, {{user}}'s place</div>
-                    <p>A cozy, slightly messy apartment where {{user}} lives. Contains a worn sofa and a window
-                        overlooking the city.</p>
+                    <p>
+                        A cozy, slightly messy apartment where {{user}} lives. Contains a worn sofa and a window
+                        overlooking the city.
+                    </p>
                 </div>
             </div>
         </div>
@@ -113,7 +169,6 @@
         }
 
         @media (max-width: 768px) {
-
             .column,
             .wide-column {
                 width: 96%;
