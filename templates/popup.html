@@ -1,0 +1,123 @@
+<div id="worldInfoRecommenderPopup">
+    <h2>World Info Recommender</h2>
+    <div class="container">
+        <div class="column">
+            <div class="card">
+                <h3>Context to Send</h3>
+                <div style="margin-top: 10px; display: flex; flex-direction: column">
+                    <label class="checkbox_label" for="worldInfoRecommend_lastMessages">
+                        <input type="checkbox" id="worldInfoRecommend_lastMessages" class="worldInfoRecommend_lastMessages" />
+                        Last Messages
+                    </label>
+                    <label class="checkbox_label" for="worldInfoRecommend_charCard">
+                        <input type="checkbox" id="worldInfoRecommend_charCard" class="worldInfoRecommend_charCard" />
+                        Char Card
+                    </label>
+                    <label class="checkbox_label" for="worldInfoRecommend_authorNote">
+                        <input type="checkbox" id="worldInfoRecommend_authorNote" class="worldInfoRecommend_authorNote" />
+                        Author Note
+                    </label>
+                    <label class="checkbox_label" for="worldInfoRecommend_worldInfo">
+                        <input type="checkbox" id="worldInfoRecommend_worldInfo" class="worldInfoRecommend_worldInfo" />
+                        World Info
+                    </label>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>Your Prompt</h3>
+                <textarea
+                    class="text_pole textarea_compact"
+                    placeholder="e.g., 'Suggest entries for places {{user}} visited.' or 'Edit the coffee shop entry...'"
+                    rows="4"></textarea>
+                <button style="width: unset;" class="menu_button interactable">Send Prompt</button>
+            </div>
+        </div>
+
+        <div class="wide-column">
+            <div class="card">
+                <h3>Suggested Entries</h3>
+
+                <div class="entry">
+                    <button class="menu_button interactable">Add</button>
+                    <h4>The Apartment</h4>
+                    <div>Triggers: apartment, home, {{user}}'s place</div>
+                    <p>A cozy, slightly messy apartment where {{user}} lives. Contains a worn sofa and a window
+                        overlooking the city.</p>
+                </div>
+
+                <div class="entry">
+                    <button class="menu_button interactable">Add</button>
+                    <h4>Downtown Coffee Shop</h4>
+                    <div>Triggers: coffee, cafe, shop, espresso</div>
+                    <p>A bustling coffee shop with a bright red sign, known for its strong espresso and flaky pastries.
+                        A common meeting spot.</p>
+                </div>
+
+                <div class="entry">
+                    <button class="menu_button interactable">Add</button>
+                    <h4>Old Library</h4>
+                    <div>Triggers: library, books, archives</div>
+                    <p>A quiet, dusty library filled with ancient tomes. The air smells of old paper and forgotten
+                        knowledge.</p>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>Current Lorebook</h3>
+
+                <div class="entry">
+                    <h4>The Apartment</h4>
+                    <div>Triggers: apartment, home, {{user}}'s place</div>
+                    <p>A cozy, slightly messy apartment where {{user}} lives. Contains a worn sofa and a window
+                        overlooking the city.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <style>
+        body {
+            margin: 0;
+            padding: 2%;
+        }
+
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2%;
+            width: 100%;
+        }
+
+        .card {
+            border: 1px solid;
+            border-radius: 10px;
+            padding: 2%;
+            margin-bottom: 2%;
+        }
+
+        .column {
+            width: 28%;
+            margin-bottom: 2%;
+        }
+
+        .wide-column {
+            width: 62%;
+        }
+
+        .entry {
+            border: 1px solid;
+            border-radius: 8px;
+            padding: 2%;
+            margin-bottom: 2%;
+            position: relative;
+        }
+
+        @media (max-width: 768px) {
+
+            .column,
+            .wide-column {
+                width: 96%;
+            }
+        }
+    </style>
+</div>
