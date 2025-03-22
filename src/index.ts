@@ -520,6 +520,7 @@ async function handleUIChanges(): Promise<void> {
         });
 
         const addButton = suggestedEntriesContainer.find('.add');
+        let lastSelectedWorldName: string | null = null;
         addButton.on('click', async (e) => {
           try {
             addButton.prop('disabled', true);
@@ -540,7 +541,7 @@ async function handleUIChanges(): Promise<void> {
 
             // If world doesn't exist, let user select one
             if (!entriesGroupByWorldName[worldName]) {
-              let selectedWorld = '';
+              let selectedWorld = lastSelectedWorldName ?? '';
 
               const div = document.createElement('div');
               const selectElement = document.createElement('select');
@@ -550,16 +551,20 @@ async function handleUIChanges(): Promise<void> {
                   return;
                 }
                 const option = document.createElement('option');
-                option.value = worldName;
+                option.value = selectedWorldNames.indexOf(worldName).toString();
                 option.text = worldName;
                 selectElement.appendChild(option);
               });
-              div.appendChild(document.createTextNode('Select world: '));
+              const infoElement = document.createElement('p');
+              infoElement.innerText = "LLM couldn't find a world for this entry. Please select one.";
+              div.appendChild(infoElement);
               div.appendChild(selectElement);
 
               let result = globalContext.callGenericPopup($(div).html(), POPUP_TYPE.CONFIRM);
-              $('#worldInfoRecommend_worldSelection').on('change', () => {
-                selectedWorld = $('#worldInfoRecommend_worldSelection').val() as string;
+              const addedSelectElement = $('#worldInfoRecommend_worldSelection');
+              addedSelectElement.val(lastSelectedWorldName ? selectedWorldNames.indexOf(lastSelectedWorldName) : 0);
+              addedSelectElement.on('change', () => {
+                selectedWorld = selectedWorldNames[parseInt((addedSelectElement.val() as string) ?? '0')];
               });
               // @ts-ignore
               result = await result;
@@ -567,11 +572,12 @@ async function handleUIChanges(): Promise<void> {
               if (result && selectedWorld) {
                 worldName = selectedWorld;
               } else {
-                st_echo('error', 'Failed to create world info entry');
+                st_echo('warning', 'No world selected');
                 return;
               }
             }
 
+            lastSelectedWorldName = worldName;
             const existingEntry = entriesGroupByWorldName[worldName]?.find((e) => e.uid === suggestedEntry.uid);
 
             remove(entry, false);
@@ -593,7 +599,7 @@ async function handleUIChanges(): Promise<void> {
               const lastEntry = values.length > 0 ? values[values.length - 1] : undefined;
               targetEntry = st_createWorldInfoEntry(worldName, stFormat);
               if (!targetEntry) {
-                st_echo('error', 'Failed to create world info entry');
+                st_echo('error', 'Failed to create entry');
                 return;
               }
 
@@ -611,15 +617,18 @@ async function handleUIChanges(): Promise<void> {
 
             // Save and update UI
             await globalContext.saveWorldInfo(worldName, stFormat);
+            entriesGroupByWorldName[worldName] = Object.values(stFormat.entries);
             st_updateEditor(targetEntry.uid, $('#WorldInfo').is(':visible'), stFormat);
             st_echo('success', isUpdate ? 'Entry updated' : 'Entry added');
           } catch (error: any) {
+            console.error(error);
             st_echo('error', error instanceof Error ? error.message : error);
           } finally {
             addButton.prop('disabled', false);
           }
         });
       } catch (error: any) {
+        console.error(error);
         st_echo('error', error instanceof Error ? error.message : error);
       } finally {
         sendButton.prop('disabled', false);
