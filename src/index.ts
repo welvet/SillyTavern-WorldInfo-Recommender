@@ -1,14 +1,9 @@
-import { buildPrompt, buildPresetSelect, ExtensionSettingsManager } from 'sillytavern-utils-lib';
-import {
-  characters,
-  selected_group,
-  st_echo,
-  st_runCommandCallback,
-  system_avatar,
-  systemUserName,
-} from 'sillytavern-utils-lib/config';
-import { ChatCompletionMessage, ChatMessage, EventNames, ExtractedData } from 'sillytavern-utils-lib/types';
+import { buildPrompt, ExtensionSettingsManager, getAllWorldInfo } from 'sillytavern-utils-lib';
+import { selected_group, st_echo, this_chid } from 'sillytavern-utils-lib/config';
+import { ChatCompletionMessage, ExtractedData } from 'sillytavern-utils-lib/types';
 import { POPUP_TYPE } from 'sillytavern-utils-lib/types/popup';
+import { DEFAULT_ST_DESCRIPTION } from './constants.js';
+import { DEFAULT_XML_DESCRIPTION } from './xml.js';
 
 const extensionName = 'SillyTavern-WorldInfo-Recommender';
 const VERSION = '0.1.0';
@@ -20,6 +15,7 @@ const KEYS = {
 } as const;
 
 interface ContextToSend {
+  stDescription: boolean;
   lastMessages: boolean;
   charCard: boolean;
   authorNote: boolean;
@@ -44,6 +40,7 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
   maxContextValue: 16384,
   maxResponseToken: 1024,
   contextToSend: {
+    stDescription: true,
     lastMessages: true,
     charCard: true,
     authorNote: true,
@@ -88,16 +85,22 @@ async function handleUIChanges(): Promise<void> {
       },
     );
 
+    const stDescriptionCheckbox = container.find('#worldInfoRecommend_stDescription');
     const lastMessagesCheckbox = container.find('#worldInfoRecommend_lastMessages');
     const charCardCheckbox = container.find('#worldInfoRecommend_charCard');
     const authorNoteCheckbox = container.find('#worldInfoRecommend_authorNote');
     const worldInfoCheckbox = container.find('#worldInfoRecommend_worldInfo');
 
+    stDescriptionCheckbox.prop('checked', settings.contextToSend.stDescription);
     lastMessagesCheckbox.prop('checked', settings.contextToSend.lastMessages);
     charCardCheckbox.prop('checked', settings.contextToSend.charCard);
     authorNoteCheckbox.prop('checked', settings.contextToSend.authorNote);
     worldInfoCheckbox.prop('checked', settings.contextToSend.worldInfo);
 
+    stDescriptionCheckbox.on('change', () => {
+      settings.contextToSend.stDescription = stDescriptionCheckbox.prop('checked');
+      settingsManager.saveSettings();
+    });
     lastMessagesCheckbox.on('change', () => {
       settings.contextToSend.lastMessages = lastMessagesCheckbox.prop('checked');
       settingsManager.saveSettings();
@@ -147,34 +150,92 @@ async function handleUIChanges(): Promise<void> {
     });
 
     container.find('#worldInfoRecommend_sendPrompt').on('click', async () => {
-      const prompt = container.find('#worldInfoRecommend_prompt').val();
-      if (!prompt) {
+      if (!settings.profileId) {
+        return;
+      }
+      const context = SillyTavern.getContext();
+      const profile = context.extensionSettings.connectionManager?.profiles?.find(
+        (profile) => profile.id === settings.profileId,
+      );
+      if (!profile) {
         return;
       }
 
-      if (!settings.profileId) {
+      let prompt = container.find('#worldInfoRecommend_prompt').val() as string;
+      if (!prompt) {
+        return;
+      }
+      prompt = globalContext.substituteParams(prompt.trim());
+      if (!prompt) {
         return;
       }
 
       const messages: ChatCompletionMessage[] = [];
       if (settings.contextToSend.lastMessages) {
-        const context = SillyTavern.getContext();
-        const profile = context.extensionSettings.connectionManager?.profiles?.find(
-          (profile) => profile.id === settings.profileId,
-        );
-        const presetName = profile?.preset;
-        const contextName = profile?.context;
-        const instructName = profile?.instruct;
-        const syspromptName = profile?.sysprompt;
+        const selectedApi = profile.api ? globalContext.CONNECT_API_MAP[profile.api].selected : undefined;
         messages.push(
-          ...(await buildPrompt(settings.profileId, undefined, undefined, {
-            presetName,
-            contextName,
-            instructName,
-            syspromptName,
+          ...(await buildPrompt(selectedApi, undefined, undefined, {
+            presetName: profile.preset,
+            contextName: profile.context,
+            instructName: profile.instruct,
+            syspromptName: profile.sysprompt,
+            ignoreCharacterFields: !!settings.contextToSend.charCard,
+            ignoreWorldInfo: true, // We don't need triggered world info here
+            ignoreAuthorNote: !!settings.contextToSend.authorNote,
+            maxContext:
+              settings.maxContextType === 'custom'
+                ? settings.maxContextValue
+                : settings.maxContextType === 'profile'
+                  ? 'preset'
+                  : 'active',
+            includeNames: !!selected_group,
           })),
         );
       }
+
+      if (settings.contextToSend.stDescription) {
+        messages.push({
+          role: 'user',
+          content: DEFAULT_ST_DESCRIPTION,
+        });
+      }
+
+      if (settings.contextToSend.worldInfo) {
+        const entriesGroupByWorldName = await getAllWorldInfo(['all'], this_chid);
+        if (Object.keys(entriesGroupByWorldName).length > 0) {
+          let worldInfoPrompt = '';
+          Object.entries(entriesGroupByWorldName).forEach(([worldName, entries]) => {
+            if (entries.length > 0) {
+              worldInfoPrompt += `# WORLD NAME: ${worldName} \n`;
+              entries.forEach((entry) => {
+                worldInfoPrompt += `## (NAME: ${entry.comment}) (ID: ${entry.uid})\n`;
+                worldInfoPrompt += `Triggers: ${entry.key.join(', ')}\n`;
+                worldInfoPrompt += `Content: ${entry.content}\n\n`;
+              });
+              worldInfoPrompt += '\n\n';
+            }
+          });
+
+          if (worldInfoPrompt) {
+            messages.push({
+              role: 'user',
+              content: `=== CURRENT LOREBOOKS === \n${worldInfoPrompt}`,
+            });
+          }
+        }
+      }
+
+      messages.push({
+        role: 'user',
+        content: `${prompt}\n\n${DEFAULT_XML_DESCRIPTION}`,
+      });
+
+      const response = (await globalContext.ConnectionManagerRequestService.sendRequest(
+        profile.id,
+        messages,
+        settings.maxResponseToken,
+      )) as ExtractedData;
+      console.log(response.content);
     });
   });
 }
