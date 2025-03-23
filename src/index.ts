@@ -287,7 +287,7 @@ async function handleUIChanges(): Promise<void> {
     const maxTokens = popupContainer.find('#worldInfoRecommend_maxTokens');
     maxTokens.val(settings.maxContextValue);
     maxTokens.on('change', () => {
-      const value = maxTokens.val() as number;
+      const value = Number(maxTokens.val() as string);
       settings.maxContextValue = value;
       settingsManager.saveSettings();
     });
@@ -295,7 +295,7 @@ async function handleUIChanges(): Promise<void> {
     const maxResponseTokens = popupContainer.find('#worldInfoRecommend_maxResponseTokens');
     maxResponseTokens.val(settings.maxResponseToken);
     maxResponseTokens.on('change', () => {
-      const value = maxResponseTokens.val() as number;
+      const value = Number(maxResponseTokens.val() as string);
       settings.maxResponseToken = value;
       settingsManager.saveSettings();
     });
@@ -462,7 +462,7 @@ async function handleUIChanges(): Promise<void> {
           messages,
           settings.maxResponseToken,
         )) as ExtractedData;
-        console.log(response.content);
+        // console.log(response.content);
         const entries = parseXMLOwn(response.content);
         if (Object.keys(entries).length === 0) {
           st_echo('warning', 'No entries in response');
@@ -485,7 +485,7 @@ async function handleUIChanges(): Promise<void> {
             }
           });
         });
-        console.log(entries);
+        // console.log(entries);
 
         const suggestedEntriesContainer = popupContainer.find('#worldInfoRecommend_suggestedEntries');
         const entryTemplate = popupContainer.find('#worldInfoRecommend_entryTemplate');

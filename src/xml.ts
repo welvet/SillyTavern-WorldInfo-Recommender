@@ -41,28 +41,33 @@ export function parseXMLOwn(xml: string): Record<string, WIEntry[]> {
   const xmlWithoutCodeBlocks = xml.replace(/```xml/g, '').replace(/```/g, '');
 
   const entriesByWorldName: Record<string, WIEntry[]> = {};
-  const rawResponse = parser.parse(xmlWithoutCodeBlocks);
-  console.log('Raw response', rawResponse);
-  if (!rawResponse.lorebooks) {
+  try {
+    const rawResponse = parser.parse(xmlWithoutCodeBlocks);
+    // console.log('Raw response', rawResponse);
+    if (!rawResponse.lorebooks) {
+      return entriesByWorldName;
+    }
+
+    const entries = rawResponse.lorebooks.entry?.content ? [rawResponse.lorebooks.entry] : rawResponse.lorebooks.entry;
+    for (const entry of entries) {
+      const worldName = entry.worldName;
+      if (!worldName) {
+        continue;
+      }
+      if (!entriesByWorldName[worldName]) {
+        entriesByWorldName[worldName] = [];
+      }
+      entriesByWorldName[worldName].push({
+        uid: entry.id ?? createRandomNumber(6),
+        key: entry.triggers?.split(',').map((t: string) => t.trim()) ?? [],
+        content: entry.content,
+        comment: entry.name,
+      });
+    }
+
     return entriesByWorldName;
+  } catch (error: any) {
+    console.error(error);
+    throw new Error('Model response is not valid XML');
   }
-
-  const entries = rawResponse.lorebooks.entry?.content ? [rawResponse.lorebooks.entry] : rawResponse.lorebooks.entry;
-  for (const entry of entries) {
-    const worldName = entry.worldName;
-    if (!worldName) {
-      continue;
-    }
-    if (!entriesByWorldName[worldName]) {
-      entriesByWorldName[worldName] = [];
-    }
-    entriesByWorldName[worldName].push({
-      uid: entry.id ?? createRandomNumber(6),
-      key: entry.triggers?.split(',').map((t: string) => t.trim()) ?? [],
-      content: entry.content,
-      comment: entry.name,
-    });
-  }
-
-  return entriesByWorldName;
 }
