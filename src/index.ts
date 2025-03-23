@@ -366,8 +366,8 @@ async function handleUIChanges(): Promise<void> {
           case 'last':
             const lastCount = settings.contextToSend.messages.last ?? 10;
             buildPromptOptions.messageIndexesBetween = {
-              end: -1, // -1 means from the end
-              start: -lastCount,
+              end: context.chat.length - 1,
+              start: context.chat.length - lastCount,
             };
             break;
           case 'range':
