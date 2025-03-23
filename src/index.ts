@@ -164,6 +164,9 @@ async function handleUIChanges(): Promise<void> {
     worldInfoCheckbox.prop('checked', settings.contextToSend.worldInfo);
     const entriesGroupByWorldName = await getActiveWorldInfo(['all'], this_chid);
     const allWorldNames = Object.keys(entriesGroupByWorldName);
+    if (allWorldNames.length === 0) {
+      st_echo('warning', 'No active World Info entries found.');
+    }
     let selectedWorldNames = structuredClone(allWorldNames);
     buildFancyDropdown('#worldInfoRecommend_worldInfoContainer', {
       label: 'World Info',
