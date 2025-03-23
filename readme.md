@@ -30,6 +30,8 @@ https://github.com/bmen25124/SillyTavern-WorldInfo-Recommender
 
 ## Demo Video
 
+https://github.com/user-attachments/assets/a26c8e44-7087-42df-9afa-7f7a2c752359
+
 ## FAQ
 
 >Can I use this with my local 8B/12B RP model?
