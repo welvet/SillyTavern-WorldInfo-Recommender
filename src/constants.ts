@@ -89,4 +89,16 @@ Content:
 
 Lorebooks are essential for long-term storytelling with AI.`;
 
+export const DEFAULT_LOREBOOK_DEFINITION = `{{#each lorebooks}}
+  {{#if this.length}}
+## WORLD NAME: {{{@key}}}
+    {{#each this as |entry|}}
+- (NAME: {{{entry.comment}}}) (ID: {{{entry.uid}}})
+Triggers: {{{join entry.key ', '}}}
+Content: {{{entry.content}}}
+
+    {{/each}}
+  {{/if}}
+{{/each}}`;
+
 export const DEFAULT_LOREBOOK_RULES = `- Respect previous chat conversation and lorebooks.`;

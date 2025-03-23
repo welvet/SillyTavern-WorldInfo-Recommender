@@ -8,9 +8,17 @@ import {
 import { selected_group, st_createWorldInfoEntry, st_echo, this_chid } from 'sillytavern-utils-lib/config';
 import { ChatCompletionMessage, ExtractedData } from 'sillytavern-utils-lib/types';
 import { POPUP_TYPE } from 'sillytavern-utils-lib/types/popup';
-import { DEFAULT_ST_DESCRIPTION } from './constants.js';
+import { DEFAULT_LOREBOOK_DEFINITION, DEFAULT_ST_DESCRIPTION } from './constants.js';
 import { DEFAULT_XML_DESCRIPTION, parseXMLOwn } from './xml.js';
 import { WIEntry } from 'sillytavern-utils-lib/types/world-info';
+
+// @ts-ignore
+import { Handlebars } from '../../../../../lib.js';
+if (!Handlebars.helpers['join']) {
+  Handlebars.registerHelper('join', function (array: any, separator: any) {
+    return array.join(separator);
+  });
+}
 
 const extensionName = 'SillyTavern-WorldInfo-Recommender';
 const VERSION = '0.1.0';
@@ -46,6 +54,7 @@ interface ExtensionSettings {
   maxResponseToken: number;
   contextToSend: ContextToSend;
   stWorldInfoPrompt: string;
+  lorebookDefinitionPrompt: string;
   responseRulesPrompt: string;
 }
 
@@ -72,6 +81,7 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
     worldInfo: true,
   },
   stWorldInfoPrompt: DEFAULT_ST_DESCRIPTION,
+  lorebookDefinitionPrompt: DEFAULT_LOREBOOK_DEFINITION,
   responseRulesPrompt: DEFAULT_XML_DESCRIPTION,
 };
 
@@ -91,10 +101,14 @@ async function handleUIChanges(): Promise<void> {
   const stWorldInfoPromptContainer = settingsContainer.find('.stWorldInfoPrompt');
   const stWorldInfoPromptContainerTextarea = stWorldInfoPromptContainer.find('textarea');
 
+  const lorebookDefinitionPromptContainer = settingsContainer.find('.lorebookDefinitionPrompt');
+  const lorebookDefinitionPromptContainerTextarea = lorebookDefinitionPromptContainer.find('textarea');
+
   const responseRulesPromptContainer = settingsContainer.find('.responseRulesPrompt');
   const responseRulesPromptContainerTextarea = responseRulesPromptContainer.find('textarea');
 
   stWorldInfoPromptContainerTextarea.val(settings.stWorldInfoPrompt);
+  lorebookDefinitionPromptContainerTextarea.val(settings.lorebookDefinitionPrompt);
   responseRulesPromptContainerTextarea.val(settings.responseRulesPrompt);
 
   stWorldInfoPromptContainer.find('.restore_default').on('click', async () => {
@@ -107,6 +121,17 @@ async function handleUIChanges(): Promise<void> {
     }
     stWorldInfoPromptContainerTextarea.val(DEFAULT_ST_DESCRIPTION);
     stWorldInfoPromptContainerTextarea.trigger('change');
+  });
+  lorebookDefinitionPromptContainer.find('.restore_default').on('click', async () => {
+    const confirm = await globalContext.Popup.show.confirm(
+      'Are you sure you want to restore the default lorebook definition?',
+      'World Info Recommender',
+    );
+    if (!confirm) {
+      return;
+    }
+    lorebookDefinitionPromptContainerTextarea.val(DEFAULT_LOREBOOK_DEFINITION);
+    lorebookDefinitionPromptContainerTextarea.trigger('change');
   });
   responseRulesPromptContainer.find('.restore_default').on('click', async () => {
     const confirm = await globalContext.Popup.show.confirm(
@@ -122,6 +147,10 @@ async function handleUIChanges(): Promise<void> {
 
   stWorldInfoPromptContainerTextarea.on('change', () => {
     settings.stWorldInfoPrompt = stWorldInfoPromptContainerTextarea.val() ?? '';
+    settingsManager.saveSettings();
+  });
+  lorebookDefinitionPromptContainerTextarea.on('change', () => {
+    settings.lorebookDefinitionPrompt = lorebookDefinitionPromptContainerTextarea.val() ?? '';
     settingsManager.saveSettings();
   });
   responseRulesPromptContainerTextarea.on('change', () => {
@@ -393,22 +422,16 @@ async function handleUIChanges(): Promise<void> {
           });
         }
         if (settings.contextToSend.worldInfo) {
-          if (allWorldNames.length > 0) {
-            let worldInfoPrompt = '';
-            Object.entries(entriesGroupByWorldName).forEach(([worldName, entries]) => {
-              if (!selectedWorldNames.includes(worldName)) {
-                return;
-              }
-              if (entries.length > 0) {
-                worldInfoPrompt += `# WORLD NAME: ${worldName}\n`;
-                entries.forEach((entry) => {
-                  worldInfoPrompt += `## (NAME: ${entry.comment}) (ID: ${entry.uid})\n`;
-                  worldInfoPrompt += `Triggers: ${entry.key.join(', ')}\n`;
-                  worldInfoPrompt += `Content: ${entry.content}\n\n`;
-                });
-                worldInfoPrompt += '\n\n';
-              }
-            });
+          if (selectedWorldNames.length > 0) {
+            const template = Handlebars.compile(settings.lorebookDefinitionPrompt);
+            const lorebooks: Record<string, WIEntry[]> = {};
+            Object.entries(entriesGroupByWorldName)
+              .filter(([worldName, entries]) => entries.length > 0 && selectedWorldNames.includes(worldName))
+              .forEach(([worldName, entries]) => {
+                lorebooks[worldName] = entries;
+              });
+
+            const worldInfoPrompt = template({ lorebooks });
 
             if (worldInfoPrompt) {
               messages.push({
@@ -433,21 +456,19 @@ async function handleUIChanges(): Promise<void> {
         if (Object.keys(suggestedEntries).length > 0) {
           const anySuggested = Object.values(suggestedEntries).some((entries) => entries.length > 0);
           if (anySuggested) {
-            let suggestedPromptrompt = '# Already suggested entries:\n';
-            Object.entries(suggestedEntries).forEach(([worldName, entries]) => {
-              if (entries.length > 0) {
-                suggestedPromptrompt += `## WORLD NAME: ${worldName}\n`;
-                entries.forEach((entry) => {
-                  suggestedPromptrompt += `- (NAME: ${entry.comment}) (ID: ${entry.uid})\n`;
-                  suggestedPromptrompt += `Triggers: ${entry.key.join(', ')}\n`;
-                  suggestedPromptrompt += `Content: ${entry.content}\n\n`;
-                });
-              }
-            });
+            const template = Handlebars.compile(settings.lorebookDefinitionPrompt);
+            const lorebooks: Record<string, WIEntry[]> = {};
+            Object.entries(suggestedEntries)
+              .filter(([_, entries]) => entries.length > 0)
+              .forEach(([worldName, entries]) => {
+                lorebooks[worldName] = entries;
+              });
+
+            const suggestedPromptrompt = template({ lorebooks });
 
             messages.push({
               role: 'system',
-              content: suggestedPromptrompt,
+              content: `=== Already suggested entries ===\n${suggestedPromptrompt}`,
             });
           }
         }
