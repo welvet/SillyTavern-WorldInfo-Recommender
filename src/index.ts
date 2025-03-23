@@ -526,9 +526,11 @@ async function handleUIChanges(): Promise<void> {
             node.attr('data-comment', entry.comment);
 
             // Update button text based on whether entry exists in current lorebook
-            const existingInLorebook = entriesGroupByWorldName[worldName]?.find((e) => e.uid === entry.uid);
-            const addButton = node.find('.add');
-            addButton.text(existingInLorebook ? 'Update' : 'Add');
+            if (finalWorldName) {
+              const existingInLorebook = entriesGroupByWorldName[finalWorldName]?.find((e) => e.uid === entry.uid);
+              const closestAddButton = node.find('.add');
+              closestAddButton.text(existingInLorebook ? 'Update' : 'Add');
+            }
 
             // Populate world select dropdown
             const worldSelect = node.find('.world-select');
@@ -543,6 +545,20 @@ async function handleUIChanges(): Promise<void> {
             if (worldIndex !== -1) {
               worldSelect.val(worldIndex.toString());
             }
+
+            // Update button text when world selection changes
+            worldSelect.on('change', function () {
+              const selectedIndex = parseInt($(this).val() as string);
+              if (isNaN(selectedIndex) || selectedIndex < 0 || selectedIndex >= allWorldNames.length) {
+                return;
+              }
+              const selectedWorldName = allWorldNames[selectedIndex];
+              const existingInLorebook = entriesGroupByWorldName[selectedWorldName]?.find(
+                (e) => e.uid === entry.uid && e.comment === entry.comment,
+              );
+              const closestAddButton = node.find('.add');
+              closestAddButton.text(existingInLorebook ? 'Update' : 'Add');
+            });
 
             node.find('.comment').text(entry.comment);
             node.find('.key').text(entry.key.join(', '));
