@@ -5,13 +5,7 @@ import {
   ExtensionSettingsManager,
   getActiveWorldInfo,
 } from 'sillytavern-utils-lib';
-import {
-  selected_group,
-  st_createWorldInfoEntry,
-  st_echo,
-  st_updateEditor,
-  this_chid,
-} from 'sillytavern-utils-lib/config';
+import { selected_group, st_createWorldInfoEntry, st_echo, this_chid } from 'sillytavern-utils-lib/config';
 import { ChatCompletionMessage, ExtractedData } from 'sillytavern-utils-lib/types';
 import { POPUP_TYPE } from 'sillytavern-utils-lib/types/popup';
 import { DEFAULT_ST_DESCRIPTION } from './constants.js';
@@ -585,8 +579,6 @@ async function handleUIChanges(): Promise<void> {
 
             // If world doesn't exist, let user select one
             if (!entriesGroupByWorldName[worldName]) {
-              let selectedWorld = lastSelectedWorldName ?? '';
-
               const div = document.createElement('div');
               const selectElement = document.createElement('select');
               selectElement.id = 'worldInfoRecommend_worldSelection';
@@ -604,8 +596,10 @@ async function handleUIChanges(): Promise<void> {
               let result = globalContext.callGenericPopup($(div).html(), POPUP_TYPE.CONFIRM);
               const addedSelectElement = $('#worldInfoRecommend_worldSelection');
               addedSelectElement.val(lastSelectedWorldName ? allWorldNames.indexOf(lastSelectedWorldName) : 0);
+              const selectedIndex = parseInt((addedSelectElement.val() as string) ?? '0');
+              let selectedWorld = allWorldNames[selectedIndex];
               addedSelectElement.on('change', () => {
-                selectedWorld = allWorldNames[parseInt((addedSelectElement.val() as string) ?? '0')];
+                selectedWorld = allWorldNames[selectedIndex];
               });
               // @ts-ignore
               result = await result;
@@ -659,7 +653,7 @@ async function handleUIChanges(): Promise<void> {
             // Save and update UI
             await globalContext.saveWorldInfo(worldName, stFormat);
             entriesGroupByWorldName[worldName] = Object.values(stFormat.entries);
-            st_updateEditor(targetEntry.uid, $('#WorldInfo').is(':visible'), stFormat);
+            globalContext.reloadWorldInfoEditor(worldName, true);
             st_echo('success', isUpdate ? 'Entry updated' : 'Entry added');
           } catch (error: any) {
             console.error(error);
@@ -689,6 +683,10 @@ function stagingCheck(): boolean {
   }
 
   if (!globalContext.getWorldInfoPrompt) {
+    return false;
+  }
+
+  if (!globalContext.reloadWorldInfoEditor) {
     return false;
   }
 
