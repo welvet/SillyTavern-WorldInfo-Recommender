@@ -77,6 +77,7 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
 
 const settingsManager = new ExtensionSettingsManager<ExtensionSettings>(KEYS.EXTENSION, DEFAULT_SETTINGS);
 
+let popupIcon: JQuery<HTMLDivElement> | undefined;
 async function handleUIChanges(): Promise<void> {
   const settingsHtml: string = await globalContext.renderExtensionTemplateAsync(
     `third-party/${extensionName}`,
@@ -129,7 +130,7 @@ async function handleUIChanges(): Promise<void> {
   });
 
   const popupIconHtml = `<div class="menu_button fa-brands fa-wpexplorer interactable" title="World Info Recommender"></div>`;
-  const popupIcon = $(popupIconHtml);
+  popupIcon = $(popupIconHtml);
   $('.form_create_bottom_buttons_block').prepend(popupIcon);
   popupIcon.on('click', async () => {
     const popupHtml: string = await globalContext.renderExtensionTemplateAsync(
@@ -704,6 +705,24 @@ async function handleUIChanges(): Promise<void> {
   });
 }
 function initializeEvents() {}
+function initializeCommands() {
+  globalContext.SlashCommandParser.addCommandObject(
+    globalContext.SlashCommand.fromProps({
+      name: 'world-info-recommender-popup-open',
+      helpString: 'Open World Info Recommender popup',
+      unnamedArgumentList: [],
+      callback: async (_args: any, _value: any) => {
+        if (popupIcon) {
+          popupIcon.trigger('click');
+          return true;
+        }
+
+        return false;
+      },
+      returns: globalContext.ARGUMENT_TYPE.BOOLEAN,
+    }),
+  );
+}
 
 function stagingCheck(): boolean {
   if (!globalContext.ConnectionManagerRequestService) {
@@ -728,6 +747,7 @@ function stagingCheck(): boolean {
 function main() {
   handleUIChanges();
   initializeEvents();
+  initializeCommands();
 }
 
 if (!stagingCheck()) {
