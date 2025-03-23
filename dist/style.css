@@ -1,0 +1,150 @@
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+.popup-content:has(#worldInfoRecommenderPopup) {
+  overflow-y: auto;
+}
+
+#worldInfoRecommenderPopup {
+  padding: 20px;
+  color: var(--SmartThemeBodyColor);
+  font-family: var(--mainFontFamily);
+  max-width: 1200px;
+  margin: 0 auto;
+  font-size: var(--mainFontSize);
+}
+#worldInfoRecommenderPopup h2 {
+  text-align: center;
+  margin-bottom: 20px;
+  font-weight: 500;
+  color: var(--SmartThemeBodyColor);
+}
+#worldInfoRecommenderPopup h3 {
+  font-weight: 500;
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: var(--SmartThemeBodyColor);
+}
+#worldInfoRecommenderPopup .container {
+  display: flex;
+  gap: 20px;
+}
+@media (max-width: 768px) {
+  #worldInfoRecommenderPopup .container {
+    flex-direction: column;
+  }
+}
+#worldInfoRecommenderPopup .column {
+  width: 30%;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+@media (max-width: 768px) {
+  #worldInfoRecommenderPopup .column {
+    width: 100%;
+  }
+}
+#worldInfoRecommenderPopup .wide-column {
+  width: 70%;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+@media (max-width: 768px) {
+  #worldInfoRecommenderPopup .wide-column {
+    width: 100%;
+  }
+}
+#worldInfoRecommenderPopup .card {
+  background-color: var(--SmartThemeBlurTintColor);
+  border-radius: 10px;
+  padding: 15px;
+  box-shadow: 0 2px 4px var(--SmartThemeShadowColor);
+  margin-bottom: 0;
+  border: 1px solid var(--SmartThemeBorderColor);
+}
+#worldInfoRecommenderPopup .message-options .message-input {
+  width: 50px;
+  margin-left: 5px;
+  margin-right: 5px;
+}
+#worldInfoRecommenderPopup .entry {
+  background-color: var(--grey10);
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 15px;
+  position: relative;
+  border: 1px solid var(--grey30);
+}
+#worldInfoRecommenderPopup .entry .menu {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+#worldInfoRecommenderPopup .entry .menu .world-select {
+  margin-right: auto;
+  max-width: 200px;
+  min-width: 150px;
+  height: 30px;
+  font-size: 0.9em;
+  background-color: var(--SmartThemeInputColor);
+  color: var(--SmartThemeInputTextColor);
+  border: 1px solid var(--SmartThemeBorderColor);
+  border-radius: 4px;
+}
+#worldInfoRecommenderPopup .entry .menu .menu_button {
+  padding: 5px 10px;
+  font-size: 0.9em;
+}
+#worldInfoRecommenderPopup .entry .menu .add {
+  background-color: var(--active);
+}
+#worldInfoRecommenderPopup .entry .menu .add:hover {
+  background-color: color-mix(in srgb, var(--active) 85%, white);
+}
+#worldInfoRecommenderPopup .entry .menu .blacklist {
+  background-color: var(--grey50);
+}
+#worldInfoRecommenderPopup .entry .menu .blacklist:hover {
+  background-color: var(--grey70);
+}
+#worldInfoRecommenderPopup .entry .menu .remove {
+  background-color: var(--warning);
+}
+#worldInfoRecommenderPopup .entry .menu .remove:hover {
+  background-color: color-mix(in srgb, var(--warning) 85%, white);
+}
+#worldInfoRecommenderPopup .entry .comment {
+  margin-top: 0;
+  margin-bottom: 5px;
+  color: var(--SmartThemeBodyColor);
+  font-weight: 500;
+}
+#worldInfoRecommenderPopup .entry .key {
+  color: var(--SmartThemeEmColor);
+  font-size: 0.9em;
+  margin-bottom: 8px;
+}
+#worldInfoRecommenderPopup .entry .content {
+  margin-bottom: 5px;
+  color: var(--SmartThemeBodyColor);
+}
+#worldInfoRecommenderPopup #worldInfoRecommend_maxTokens_container {
+  display: none;
+  margin-top: 10px;
+}
+#worldInfoRecommenderPopup #worldInfoRecommend_sendPrompt {
+  width: unset;
+}
+#worldInfoRecommenderPopup button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
