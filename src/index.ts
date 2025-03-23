@@ -506,22 +506,22 @@ async function handleUIChanges(): Promise<void> {
             }
             worldIndex = allWorldNames.indexOf(finalWorldName);
 
-            if (finalWorldName && !suggestedEntries[finalWorldName]) {
-              suggestedEntries[finalWorldName] = [];
+            if (!suggestedEntries[worldName]) {
+              suggestedEntries[worldName] = [];
             }
 
-            const existingEntry = suggestedEntries[finalWorldName].find(
+            const existingEntry = suggestedEntries[worldName].find(
               (e) => e.uid === entry.uid && e.comment === entry.comment,
             );
             let node: JQuery<HTMLDivElement> | undefined;
 
             if (existingEntry) {
-              let query = `.entry[data-id="${entry.uid}"][data-world-name="${finalWorldName}"]`;
+              let query = `.entry[data-id="${entry.uid}"][data-world-name="${worldName}"]`;
               node = suggestedEntriesContainer.find(query);
             } else {
               node = $(entryTemplate.html());
             }
-            node.attr('data-world-name', finalWorldName);
+            node.attr('data-world-name', worldName);
             node.attr('data-id', entry.uid.toString());
             node.attr('data-comment', entry.comment);
 
@@ -543,7 +543,7 @@ async function handleUIChanges(): Promise<void> {
             node.find('.key').text(entry.key.join(', '));
             node.find('.content').text(entry.content);
             if (!existingEntry) {
-              suggestedEntries[finalWorldName].push(entry);
+              suggestedEntries[worldName].push(entry);
               suggestedEntriesContainer.append(node);
             } else {
               existingEntry.key = entry.key;
