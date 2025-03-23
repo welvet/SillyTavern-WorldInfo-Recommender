@@ -28,6 +28,10 @@ Install via the SillyTavern extension installer:
 https://github.com/bmen25124/SillyTavern-WorldInfo-Recommender
 ```
 
+To open the recommender popup, click the extension icon:
+
+![icon](images/icon.png)
+
 ## Demo Video
 
 https://github.com/user-attachments/assets/a26c8e44-7087-42df-9afa-7f7a2c752359
