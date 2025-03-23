@@ -525,6 +525,11 @@ async function handleUIChanges(): Promise<void> {
             node.attr('data-id', entry.uid.toString());
             node.attr('data-comment', entry.comment);
 
+            // Update button text based on whether entry exists in current lorebook
+            const existingInLorebook = entriesGroupByWorldName[worldName]?.find((e) => e.uid === entry.uid);
+            const addButton = node.find('.add');
+            addButton.text(existingInLorebook ? 'Update' : 'Add');
+
             // Populate world select dropdown
             const worldSelect = node.find('.world-select');
             worldSelect.empty();
