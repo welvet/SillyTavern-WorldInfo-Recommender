@@ -492,33 +492,58 @@ async function handleUIChanges(): Promise<void> {
         if (!entryTemplate) {
           return;
         }
+        let lastAddedWorldName: string | null = null;
         Object.entries(entries).forEach(([worldName, entries]) => {
           entries.forEach((entry) => {
-            if (!suggestedEntries[worldName]) {
-              suggestedEntries[worldName] = [];
+            let finalWorldName = worldName;
+            let worldIndex = allWorldNames.indexOf(finalWorldName);
+            if (worldIndex === -1) {
+              if (lastAddedWorldName) {
+                finalWorldName = lastAddedWorldName;
+              } else {
+                finalWorldName = allWorldNames.length > 0 ? allWorldNames[0] : '';
+              }
+            }
+            worldIndex = allWorldNames.indexOf(finalWorldName);
+
+            if (finalWorldName && !suggestedEntries[finalWorldName]) {
+              suggestedEntries[finalWorldName] = [];
             }
 
-            const existingEntry = suggestedEntries[worldName].find(
+            const existingEntry = suggestedEntries[finalWorldName].find(
               (e) => e.uid === entry.uid && e.comment === entry.comment,
             );
             let node: JQuery<HTMLDivElement> | undefined;
+
             if (existingEntry) {
-              let query = `.entry[data-id="${entry.uid}"][data-world-name="${worldName}"]`;
+              let query = `.entry[data-id="${entry.uid}"][data-world-name="${finalWorldName}"]`;
               node = suggestedEntriesContainer.find(query);
             } else {
               node = $(entryTemplate.html());
             }
-
-            node.attr('data-world-name', worldName);
+            node.attr('data-world-name', finalWorldName);
             node.attr('data-id', entry.uid.toString());
             node.attr('data-comment', entry.comment);
 
-            node.find('.worldName').text(worldName);
+            // Populate world select dropdown
+            const worldSelect = node.find('.world-select');
+            worldSelect.empty();
+            allWorldNames.forEach((name, index) => {
+              const option = document.createElement('option');
+              option.value = index.toString();
+              option.text = name;
+              worldSelect.append(option);
+            });
+            // Set selected value to the index of the world name
+            if (worldIndex !== -1) {
+              worldSelect.val(worldIndex.toString());
+            }
+
             node.find('.comment').text(entry.comment);
             node.find('.key').text(entry.key.join(', '));
             node.find('.content').text(entry.content);
             if (!existingEntry) {
-              suggestedEntries[worldName].push(entry);
+              suggestedEntries[finalWorldName].push(entry);
               suggestedEntriesContainer.append(node);
             } else {
               existingEntry.key = entry.key;
@@ -533,6 +558,9 @@ async function handleUIChanges(): Promise<void> {
           const id = entry.data('id');
           const comment = entry.data('comment');
           if (!entry || !worldName || id === null || id === undefined || !comment) {
+            if (!worldName) {
+              st_echo('warning', 'Selected entry is missing world name');
+            }
             return;
           }
           if (blacklist) {
@@ -561,7 +589,7 @@ async function handleUIChanges(): Promise<void> {
         });
 
         const addButton = suggestedEntriesContainer.find('.add');
-        let lastSelectedWorldName: string | null = null;
+
         addButton.on('click', async (e) => {
           try {
             addButton.prop('disabled', true);
@@ -573,6 +601,9 @@ async function handleUIChanges(): Promise<void> {
             const id = entry.data('id');
             const comment = entry.data('comment');
             if (!entry || !worldName || id === null || id === undefined || !comment) {
+              if (!worldName) {
+                st_echo('warning', 'Selected entry is missing world name');
+              }
               return;
             }
             const suggestedEntry = structuredClone(suggestedEntries[worldName].find((e) => e.uid === parseInt(id)));
@@ -580,42 +611,19 @@ async function handleUIChanges(): Promise<void> {
               return;
             }
 
-            // If world doesn't exist, let user select one
-            if (!entriesGroupByWorldName[worldName]) {
-              const div = document.createElement('div');
-              const selectElement = document.createElement('select');
-              selectElement.id = 'worldInfoRecommend_worldSelection';
-              allWorldNames.forEach((worldName) => {
-                const option = document.createElement('option');
-                option.value = allWorldNames.indexOf(worldName).toString();
-                option.text = worldName;
-                selectElement.appendChild(option);
-              });
-              const infoElement = document.createElement('p');
-              infoElement.innerText = "LLM couldn't find a world for this entry. Please select one.";
-              div.appendChild(infoElement);
-              div.appendChild(selectElement);
+            // Get the selected world index from the dropdown
+            const worldSelect = entry.find('.world-select');
+            const selectedIndex = parseInt(worldSelect.val() as string);
 
-              let result = globalContext.callGenericPopup($(div).html(), POPUP_TYPE.CONFIRM);
-              const addedSelectElement = $('#worldInfoRecommend_worldSelection');
-              addedSelectElement.val(lastSelectedWorldName ? allWorldNames.indexOf(lastSelectedWorldName) : 0);
-              const selectedIndex = parseInt((addedSelectElement.val() as string) ?? '0');
-              let selectedWorld = allWorldNames[selectedIndex];
-              addedSelectElement.on('change', () => {
-                selectedWorld = allWorldNames[selectedIndex];
-              });
-              // @ts-ignore
-              result = await result;
-              // @ts-ignore
-              if (result && selectedWorld) {
-                worldName = selectedWorld;
-              } else {
-                st_echo('warning', 'No world selected');
-                return;
-              }
+            if (isNaN(selectedIndex) || selectedIndex < 0 || selectedIndex >= allWorldNames.length) {
+              st_echo('warning', 'Please select a valid world');
+              return;
             }
 
-            lastSelectedWorldName = worldName;
+            // Update the world name with the selected one
+            worldName = allWorldNames[selectedIndex];
+
+            lastAddedWorldName = worldName;
             const existingEntry = entriesGroupByWorldName[worldName]?.find((e) => e.uid === suggestedEntry.uid);
 
             remove(entry, false);
