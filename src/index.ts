@@ -8,7 +8,7 @@ import {
 import { selected_group, st_createWorldInfoEntry, st_echo, this_chid } from 'sillytavern-utils-lib/config';
 import { ChatCompletionMessage, ExtractedData } from 'sillytavern-utils-lib/types';
 import { POPUP_TYPE } from 'sillytavern-utils-lib/types/popup';
-import { DEFAULT_LOREBOOK_DEFINITION, DEFAULT_ST_DESCRIPTION } from './constants.js';
+import { DEFAULT_LOREBOOK_DEFINITION, DEFAULT_LOREBOOK_RULES, DEFAULT_ST_DESCRIPTION } from './constants.js';
 import { DEFAULT_XML_DESCRIPTION, parseXMLOwn } from './xml.js';
 import { WIEntry } from 'sillytavern-utils-lib/types/world-info';
 
@@ -57,6 +57,8 @@ interface ExtensionSettings {
   usingDefaultStWorldInfoPrompt: boolean;
   lorebookDefinitionPrompt: string;
   usingDefaultLorebookDefinitionPrompt: boolean;
+  lorebookRulesPrompt: string;
+  usingDefaultLorebookRulesPrompt: boolean;
   responseRulesPrompt: string;
   usingDefaultResponseRulesPrompt: boolean;
 }
@@ -87,6 +89,8 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
   usingDefaultStWorldInfoPrompt: true,
   lorebookDefinitionPrompt: DEFAULT_LOREBOOK_DEFINITION,
   usingDefaultLorebookDefinitionPrompt: true,
+  lorebookRulesPrompt: DEFAULT_LOREBOOK_RULES,
+  usingDefaultLorebookRulesPrompt: true,
   responseRulesPrompt: DEFAULT_XML_DESCRIPTION,
   usingDefaultResponseRulesPrompt: true,
 };
@@ -110,11 +114,15 @@ async function handleUIChanges(): Promise<void> {
   const lorebookDefinitionPromptContainer = settingsContainer.find('.lorebookDefinitionPrompt');
   const lorebookDefinitionPromptContainerTextarea = lorebookDefinitionPromptContainer.find('textarea');
 
+  const lorebookRulesPromptContainer = settingsContainer.find('.lorebookRulesPrompt');
+  const lorebookRulesPromptContainerTextarea = lorebookRulesPromptContainer.find('textarea');
+
   const responseRulesPromptContainer = settingsContainer.find('.responseRulesPrompt');
   const responseRulesPromptContainerTextarea = responseRulesPromptContainer.find('textarea');
 
   stWorldInfoPromptContainerTextarea.val(settings.stWorldInfoPrompt);
   lorebookDefinitionPromptContainerTextarea.val(settings.lorebookDefinitionPrompt);
+  lorebookRulesPromptContainerTextarea.val(settings.lorebookRulesPrompt);
   responseRulesPromptContainerTextarea.val(settings.responseRulesPrompt);
 
   stWorldInfoPromptContainer.find('.restore_default').on('click', async () => {
@@ -139,6 +147,17 @@ async function handleUIChanges(): Promise<void> {
     lorebookDefinitionPromptContainerTextarea.val(DEFAULT_LOREBOOK_DEFINITION);
     lorebookDefinitionPromptContainerTextarea.trigger('change');
   });
+  lorebookRulesPromptContainer.find('.restore_default').on('click', async () => {
+    const confirm = await globalContext.Popup.show.confirm(
+      'Are you sure you want to restore the default lorebook rules?',
+      'World Info Recommender',
+    );
+    if (!confirm) {
+      return;
+    }
+    lorebookRulesPromptContainerTextarea.val(DEFAULT_LOREBOOK_RULES);
+    lorebookRulesPromptContainerTextarea.trigger('change');
+  });
   responseRulesPromptContainer.find('.restore_default').on('click', async () => {
     const confirm = await globalContext.Popup.show.confirm(
       'Are you sure you want to restore the default response rules?',
@@ -159,6 +178,11 @@ async function handleUIChanges(): Promise<void> {
   lorebookDefinitionPromptContainerTextarea.on('change', () => {
     settings.lorebookDefinitionPrompt = lorebookDefinitionPromptContainerTextarea.val() ?? '';
     settings.usingDefaultLorebookDefinitionPrompt = settings.lorebookDefinitionPrompt === DEFAULT_LOREBOOK_DEFINITION;
+    settingsManager.saveSettings();
+  });
+  lorebookRulesPromptContainerTextarea.on('change', () => {
+    settings.lorebookRulesPrompt = lorebookRulesPromptContainerTextarea.val() ?? '';
+    settings.usingDefaultLorebookRulesPrompt = settings.lorebookRulesPrompt === DEFAULT_LOREBOOK_RULES;
     settingsManager.saveSettings();
   });
   responseRulesPromptContainerTextarea.on('change', () => {
@@ -482,7 +506,7 @@ async function handleUIChanges(): Promise<void> {
           }
         }
 
-        const userPrompt = `${settings.responseRulesPrompt}\n\n${prompt}`;
+        const userPrompt = `${settings.responseRulesPrompt}\n\n${settings.lorebookRulesPrompt}\n\nYour task:\n${prompt}`;
         messages.push({
           role: 'user',
           content: userPrompt,
@@ -799,6 +823,10 @@ if (!stagingCheck()) {
           settings.lorebookDefinitionPrompt !== DEFAULT_LOREBOOK_DEFINITION
         ) {
           settings.lorebookDefinitionPrompt = DEFAULT_LOREBOOK_DEFINITION;
+          anyChange = true;
+        }
+        if (settings.usingDefaultLorebookRulesPrompt && settings.lorebookRulesPrompt !== DEFAULT_LOREBOOK_RULES) {
+          settings.lorebookRulesPrompt = DEFAULT_LOREBOOK_RULES;
           anyChange = true;
         }
         if (settings.usingDefaultResponseRulesPrompt && settings.responseRulesPrompt !== DEFAULT_XML_DESCRIPTION) {

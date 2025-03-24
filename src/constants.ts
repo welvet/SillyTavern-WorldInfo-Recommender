@@ -103,4 +103,4 @@ Content: {{entry.content}}
   {{/if}}
 {{/each}}`;
 
-export const DEFAULT_LOREBOOK_RULES = `- Respect previous chat conversation and lorebooks.`;
+export const DEFAULT_LOREBOOK_RULES = `- Don't suggest already existing or suggested entries.`;
