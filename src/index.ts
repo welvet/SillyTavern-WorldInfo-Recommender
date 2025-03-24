@@ -497,12 +497,16 @@ async function handleUIChanges(): Promise<void> {
 
         // Show detailed results
         if (addedCount > 0 || updatedCount > 0) {
-          const message =
-            `Successfully processed ${addedCount + updatedCount} entries:` +
-            `- Added: ${addedCount}\n` +
-            `- Updated: ${updatedCount}\n` +
-            `- Modified worlds: ${Array.from(modifiedWorlds).join(', ')}`;
-          st_echo('success', message);
+          const message = `
+            <div class="results-summary">
+              <p>Successfully processed ${addedCount + updatedCount} entries:</p>
+              <ul>
+              <li>Added: ${addedCount}</li>
+              <li>Updated: ${updatedCount}</li>
+              <li>Modified worlds: ${Array.from(modifiedWorlds).join(', ')}</li>
+              </ul>
+            </div>`;
+          st_echo('success', message, { escapeHtml: false });
         } else {
           st_echo('warning', 'No entries were processed successfully');
         }
