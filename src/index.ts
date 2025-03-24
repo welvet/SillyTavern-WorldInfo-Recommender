@@ -21,7 +21,7 @@ if (!Handlebars.helpers['join']) {
 }
 
 const extensionName = 'SillyTavern-WorldInfo-Recommender';
-const VERSION = '0.1.0';
+const VERSION = '0.1.1';
 const FORMAT_VERSION = 'F_1.0';
 const globalContext = SillyTavern.getContext();
 
@@ -54,8 +54,11 @@ interface ExtensionSettings {
   maxResponseToken: number;
   contextToSend: ContextToSend;
   stWorldInfoPrompt: string;
+  usingDefaultStWorldInfoPrompt: boolean;
   lorebookDefinitionPrompt: string;
+  usingDefaultLorebookDefinitionPrompt: boolean;
   responseRulesPrompt: string;
+  usingDefaultResponseRulesPrompt: boolean;
 }
 
 const DEFAULT_SETTINGS: ExtensionSettings = {
@@ -81,8 +84,11 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
     worldInfo: true,
   },
   stWorldInfoPrompt: DEFAULT_ST_DESCRIPTION,
+  usingDefaultStWorldInfoPrompt: true,
   lorebookDefinitionPrompt: DEFAULT_LOREBOOK_DEFINITION,
+  usingDefaultLorebookDefinitionPrompt: true,
   responseRulesPrompt: DEFAULT_XML_DESCRIPTION,
+  usingDefaultResponseRulesPrompt: true,
 };
 
 const settingsManager = new ExtensionSettingsManager<ExtensionSettings>(KEYS.EXTENSION, DEFAULT_SETTINGS);
@@ -147,14 +153,17 @@ async function handleUIChanges(): Promise<void> {
 
   stWorldInfoPromptContainerTextarea.on('change', () => {
     settings.stWorldInfoPrompt = stWorldInfoPromptContainerTextarea.val() ?? '';
+    settings.usingDefaultStWorldInfoPrompt = settings.stWorldInfoPrompt === DEFAULT_ST_DESCRIPTION;
     settingsManager.saveSettings();
   });
   lorebookDefinitionPromptContainerTextarea.on('change', () => {
     settings.lorebookDefinitionPrompt = lorebookDefinitionPromptContainerTextarea.val() ?? '';
+    settings.usingDefaultLorebookDefinitionPrompt = settings.lorebookDefinitionPrompt === DEFAULT_LOREBOOK_DEFINITION;
     settingsManager.saveSettings();
   });
   responseRulesPromptContainerTextarea.on('change', () => {
     settings.responseRulesPrompt = responseRulesPromptContainerTextarea.val() ?? '';
+    settings.usingDefaultResponseRulesPrompt = settings.responseRulesPrompt === DEFAULT_XML_DESCRIPTION;
     settingsManager.saveSettings();
   });
 
@@ -423,7 +432,7 @@ async function handleUIChanges(): Promise<void> {
         }
         if (settings.contextToSend.worldInfo) {
           if (selectedWorldNames.length > 0) {
-            const template = Handlebars.compile(settings.lorebookDefinitionPrompt);
+            const template = Handlebars.compile(settings.lorebookDefinitionPrompt, { noEscape: true });
             const lorebooks: Record<string, WIEntry[]> = {};
             Object.entries(entriesGroupByWorldName)
               .filter(([worldName, entries]) => entries.length > 0 && selectedWorldNames.includes(worldName))
@@ -456,7 +465,7 @@ async function handleUIChanges(): Promise<void> {
         if (Object.keys(suggestedEntries).length > 0) {
           const anySuggested = Object.values(suggestedEntries).some((entries) => entries.length > 0);
           if (anySuggested) {
-            const template = Handlebars.compile(settings.lorebookDefinitionPrompt);
+            const template = Handlebars.compile(settings.lorebookDefinitionPrompt, { noEscape: true });
             const lorebooks: Record<string, WIEntry[]> = {};
             Object.entries(suggestedEntries)
               .filter(([_, entries]) => entries.length > 0)
@@ -777,7 +786,29 @@ if (!stagingCheck()) {
 } else {
   settingsManager
     .initializeSettings()
-    .then((_result) => {
+    .then((result) => {
+      if (result.version.changed) {
+        const settings = settingsManager.getSettings();
+        let anyChange = false;
+        if (settings.usingDefaultStWorldInfoPrompt && settings.stWorldInfoPrompt !== DEFAULT_ST_DESCRIPTION) {
+          settings.stWorldInfoPrompt = DEFAULT_ST_DESCRIPTION;
+          anyChange = true;
+        }
+        if (
+          settings.usingDefaultLorebookDefinitionPrompt &&
+          settings.lorebookDefinitionPrompt !== DEFAULT_LOREBOOK_DEFINITION
+        ) {
+          settings.lorebookDefinitionPrompt = DEFAULT_LOREBOOK_DEFINITION;
+          anyChange = true;
+        }
+        if (settings.usingDefaultResponseRulesPrompt && settings.responseRulesPrompt !== DEFAULT_XML_DESCRIPTION) {
+          settings.responseRulesPrompt = DEFAULT_XML_DESCRIPTION;
+          anyChange = true;
+        }
+        if (anyChange) {
+          settingsManager.saveSettings();
+        }
+      }
       main();
     })
     .catch((error) => {
