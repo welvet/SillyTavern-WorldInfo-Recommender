@@ -392,6 +392,18 @@ async function handleUIChanges(): Promise<void> {
       saveSession();
     }
 
+    // Check if selectedWorldNames is a subset of allWorldNames
+    const worldNamesMissing = activeSession.selectedWorldNames.filter(
+      (worldName) => !allWorldNames.includes(worldName),
+    );
+    if (worldNamesMissing.length > 0) {
+      st_echo('warning', `World names missing from last session: ${worldNamesMissing.join(', ')}`);
+      activeSession.selectedWorldNames = activeSession.selectedWorldNames.filter(
+        (worldName) => !worldNamesMissing.includes(worldName),
+      );
+      saveSession();
+    }
+
     const { selectAll } = buildFancyDropdown('#worldInfoRecommend_worldInfoContainer', {
       label: 'World Info',
       initialList: allWorldNames,
