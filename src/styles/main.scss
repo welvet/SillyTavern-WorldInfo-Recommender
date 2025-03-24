@@ -169,6 +169,27 @@
         }
     }
 
+    .actions {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: 15px;
+
+        .menu_button {
+            background-color: var(--active);
+            min-width: 90px;
+
+            &:hover {
+                background-color: color-mix(in srgb, var(--active) 85%, white);
+            }
+
+            &:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+                pointer-events: none;
+            }
+        }
+    }
+
     #worldInfoRecommend_maxTokens_container {
         display: none;
         margin-top: 10px;

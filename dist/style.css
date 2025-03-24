@@ -148,6 +148,23 @@
   margin-bottom: 5px;
   color: var(--SmartThemeBodyColor);
 }
+#worldInfoRecommenderPopup .actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 15px;
+}
+#worldInfoRecommenderPopup .actions .menu_button {
+  background-color: var(--active);
+  min-width: 90px;
+}
+#worldInfoRecommenderPopup .actions .menu_button:hover {
+  background-color: color-mix(in srgb, var(--active) 85%, white);
+}
+#worldInfoRecommenderPopup .actions .menu_button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
 #worldInfoRecommenderPopup #worldInfoRecommend_maxTokens_container {
   display: none;
   margin-top: 10px;

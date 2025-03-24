@@ -366,6 +366,154 @@ async function handleUIChanges(): Promise<void> {
     let suggestedEntries: Record<string, WIEntry[]> = {};
     const blackListedEntries: string[] = [];
     const sendButton = popupContainer.find('#worldInfoRecommend_sendPrompt');
+    const addAllButton = popupContainer.find('#worldInfoRecommend_addAll');
+
+    async function addEntry(
+      entry: WIEntry,
+      selectedWorldName: string,
+      skipSave: boolean = false,
+    ): Promise<'added' | 'updated'> {
+      if (!entriesGroupByWorldName[selectedWorldName]) {
+        entriesGroupByWorldName[selectedWorldName] = [];
+      }
+
+      const stFormat: { entries: Record<number, WIEntry> } = {
+        entries: {},
+      };
+      for (const entry of entriesGroupByWorldName[selectedWorldName]) {
+        stFormat.entries[entry.uid] = entry;
+      }
+
+      const existingEntry = entriesGroupByWorldName[selectedWorldName]?.find((e) => e.uid === entry.uid);
+      let targetEntry: WIEntry | undefined;
+      const isUpdate = !!existingEntry;
+
+      if (isUpdate) {
+        targetEntry = existingEntry;
+      } else {
+        const values = Object.values(stFormat.entries);
+        const lastEntry = values.length > 0 ? values[values.length - 1] : undefined;
+        targetEntry = st_createWorldInfoEntry(selectedWorldName, stFormat);
+        if (!targetEntry) {
+          throw new Error('Failed to create entry');
+        }
+
+        const newId = targetEntry.uid;
+        if (lastEntry) {
+          Object.assign(targetEntry, lastEntry);
+        }
+        targetEntry.uid = newId;
+      }
+
+      // Update entry properties
+      targetEntry.key = entry.key;
+      targetEntry.content = entry.content;
+      targetEntry.comment = entry.comment;
+
+      // Update local state
+      stFormat.entries[targetEntry.uid] = targetEntry;
+      entriesGroupByWorldName[selectedWorldName] = Object.values(stFormat.entries);
+
+      // Save and update UI only if not skipping (for individual adds)
+      if (!skipSave) {
+        await globalContext.saveWorldInfo(selectedWorldName, stFormat);
+        globalContext.reloadWorldInfoEditor(selectedWorldName, true);
+      }
+
+      return isUpdate ? 'updated' : 'added';
+    }
+
+    // Add all button handler
+    addAllButton.on('click', async () => {
+      try {
+        addAllButton.prop('disabled', true);
+
+        // First, validate that we have worlds to add entries to
+        if (allWorldNames.length === 0) {
+          st_echo('error', 'No available worlds to add entries to');
+          return;
+        }
+
+        // Count total entries to process
+        const totalEntries = Object.values(suggestedEntries).reduce((sum, entries) => sum + entries.length, 0);
+
+        if (totalEntries === 0) {
+          st_echo('warning', 'No entries to add');
+          return;
+        }
+
+        const confirm = await globalContext.Popup.show.confirm(
+          'World Info Recommender',
+          `Are you sure you want to add/update all ${totalEntries} suggested entries?`,
+        );
+        if (!confirm) {
+          return;
+        }
+
+        let addedCount = 0;
+        let updatedCount = 0;
+        const results: { worldName: string; entry: WIEntry; status: 'added' | 'updated' }[] = [];
+        const modifiedWorlds = new Set<string>();
+
+        // Process entries
+        for (const [worldName, entries] of Object.entries(suggestedEntries)) {
+          if (entries.length === 0) continue;
+
+          for (const entry of entries) {
+            // If the world doesn't exist in the lorebook, use the first available world
+            let targetWorldName = worldName;
+            if (!entriesGroupByWorldName[targetWorldName]) {
+              targetWorldName = allWorldNames[0];
+            }
+
+            try {
+              const status = await addEntry(entry, targetWorldName, true); // Skip save during individual adds
+              results.push({ worldName: targetWorldName, entry, status });
+              if (status === 'added') addedCount++;
+              else updatedCount++;
+              modifiedWorlds.add(targetWorldName);
+            } catch (error) {
+              console.error(`Failed to process entry: ${entry.comment}`, error);
+              st_echo('error', `Failed to process entry: ${entry.comment}`);
+            }
+          }
+        }
+
+        // Save and reload all modified worlds at once
+        for (const worldName of modifiedWorlds) {
+          const stFormat: { entries: Record<number, WIEntry> } = {
+            entries: {},
+          };
+          for (const entry of entriesGroupByWorldName[worldName]) {
+            stFormat.entries[entry.uid] = entry;
+          }
+          await globalContext.saveWorldInfo(worldName, stFormat);
+          globalContext.reloadWorldInfoEditor(worldName, true);
+        }
+
+        // Clear suggested entries after adding all
+        suggestedEntries = {};
+        popupContainer.find('#worldInfoRecommend_suggestedEntries').empty();
+
+        // Show detailed results
+        if (addedCount > 0 || updatedCount > 0) {
+          const message =
+            `Successfully processed ${addedCount + updatedCount} entries:` +
+            `- Added: ${addedCount}\n` +
+            `- Updated: ${updatedCount}\n` +
+            `- Modified worlds: ${Array.from(modifiedWorlds).join(', ')}`;
+          st_echo('success', message);
+        } else {
+          st_echo('warning', 'No entries were processed successfully');
+        }
+      } catch (error: any) {
+        console.error(error);
+        st_echo('error', error instanceof Error ? error.message : error);
+      } finally {
+        addAllButton.prop('disabled', false);
+      }
+    });
+
     sendButton.on('click', async () => {
       try {
         sendButton.prop('disabled', true);
@@ -697,51 +845,12 @@ async function handleUIChanges(): Promise<void> {
             }
 
             // Update the world name with the selected one
-            worldName = allWorldNames[selectedIndex];
-
-            lastAddedWorldName = worldName;
-            const existingEntry = entriesGroupByWorldName[worldName]?.find((e) => e.uid === suggestedEntry.uid);
+            const selectedWorldName = allWorldNames[selectedIndex];
+            lastAddedWorldName = selectedWorldName;
 
             remove(entry, false);
-
-            const stFormat: { entries: Record<number, WIEntry> } = {
-              entries: {},
-            };
-            for (const entry of entriesGroupByWorldName[worldName]) {
-              stFormat.entries[entry.uid] = entry;
-            }
-
-            let targetEntry: WIEntry | undefined;
-            const isUpdate = !!existingEntry;
-
-            if (isUpdate) {
-              targetEntry = existingEntry;
-            } else {
-              const values = Object.values(stFormat.entries);
-              const lastEntry = values.length > 0 ? values[values.length - 1] : undefined;
-              targetEntry = st_createWorldInfoEntry(worldName, stFormat);
-              if (!targetEntry) {
-                st_echo('error', 'Failed to create entry');
-                return;
-              }
-
-              const newId = targetEntry.uid;
-              if (lastEntry) {
-                Object.assign(targetEntry, lastEntry);
-              }
-              targetEntry.uid = newId;
-            }
-
-            // Update entry properties
-            targetEntry.key = suggestedEntry.key;
-            targetEntry.content = suggestedEntry.content;
-            targetEntry.comment = suggestedEntry.comment;
-
-            // Save and update UI
-            await globalContext.saveWorldInfo(worldName, stFormat);
-            entriesGroupByWorldName[worldName] = Object.values(stFormat.entries);
-            globalContext.reloadWorldInfoEditor(worldName, true);
-            st_echo('success', isUpdate ? 'Entry updated' : 'Entry added');
+            const status = await addEntry(suggestedEntry, selectedWorldName);
+            st_echo('success', status === 'added' ? 'Entry added' : 'Entry updated');
           } catch (error: any) {
             console.error(error);
             st_echo('error', error instanceof Error ? error.message : error);
