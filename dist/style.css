@@ -160,6 +160,13 @@
 #worldInfoRecommenderPopup .actions .menu_button:hover {
   background-color: color-mix(in srgb, var(--active) 85%, white);
 }
+#worldInfoRecommenderPopup .actions .menu_button#worldInfoRecommend_reset {
+  background-color: var(--grey50);
+  margin-left: 8px;
+}
+#worldInfoRecommenderPopup .actions .menu_button#worldInfoRecommend_reset:hover {
+  background-color: var(--grey70);
+}
 #worldInfoRecommenderPopup .actions .menu_button:disabled {
   opacity: 0.5;
   cursor: not-allowed;

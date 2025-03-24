@@ -392,7 +392,7 @@ async function handleUIChanges(): Promise<void> {
       saveSession();
     }
 
-    buildFancyDropdown('#worldInfoRecommend_worldInfoContainer', {
+    const { selectAll } = buildFancyDropdown('#worldInfoRecommend_worldInfoContainer', {
       label: 'World Info',
       initialList: allWorldNames,
       initialValues: activeSession.selectedWorldNames,
@@ -654,7 +654,35 @@ async function handleUIChanges(): Promise<void> {
       });
     }
 
+    function resetUIAndSession() {
+      suggestedEntriesContainer.empty();
+      activeSession.suggestedEntries = {};
+      activeSession.blackListedEntries = [];
+      activeSession.selectedWorldNames = structuredClone(allWorldNames);
+      selectAll();
+      saveSession();
+    }
+
     applyEntriesToUI(activeSession.suggestedEntries, null, 'initial');
+
+    // Reset button handler
+    const resetButton = popupContainer.find('#worldInfoRecommend_reset');
+    resetButton.on('click', async () => {
+      try {
+        const confirm = await globalContext.Popup.show.confirm(
+          'World Info Recommender',
+          'Are you sure you want to reset? This will clear all suggested entries, reset the \"Lorebooks to Include\".',
+        );
+        if (!confirm) {
+          return;
+        }
+        resetUIAndSession();
+        st_echo('success', 'Reset successful');
+      } catch (error: any) {
+        console.error(error);
+        st_echo('error', error instanceof Error ? error.message : error);
+      }
+    });
 
     // Add all button handler
     addAllButton.on('click', async () => {
