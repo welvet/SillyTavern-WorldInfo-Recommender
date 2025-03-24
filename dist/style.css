@@ -88,6 +88,18 @@
   gap: 8px;
   margin-bottom: 10px;
 }
+@media (max-width: 512px) {
+  #worldInfoRecommenderPopup .entry .menu {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  #worldInfoRecommenderPopup .entry .menu .world-select {
+    order: 2;
+    margin-right: 0;
+    width: 100%;
+    max-width: 100%;
+  }
+}
 #worldInfoRecommenderPopup .entry .menu .world-select {
   margin-right: auto;
   max-width: 200px;

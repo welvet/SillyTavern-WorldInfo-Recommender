@@ -96,6 +96,18 @@
             gap: 8px;
             margin-bottom: 10px;
 
+            @media (max-width: 512px) {
+                flex-wrap: wrap;
+                justify-content: flex-end;
+
+                .world-select {
+                    order: 2;
+                    margin-right: 0;
+                    width: 100%;
+                    max-width: 100%;
+                }
+            }
+
             .world-select {
                 margin-right: auto;
                 max-width: 200px;
