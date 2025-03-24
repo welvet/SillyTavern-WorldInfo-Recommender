@@ -5,7 +5,13 @@ import {
   ExtensionSettingsManager,
   getActiveWorldInfo,
 } from 'sillytavern-utils-lib';
-import { selected_group, st_createWorldInfoEntry, st_echo, this_chid } from 'sillytavern-utils-lib/config';
+import {
+  selected_group,
+  st_createWorldInfoEntry,
+  st_echo,
+  st_getCharaFilename,
+  this_chid,
+} from 'sillytavern-utils-lib/config';
 import { ChatCompletionMessage, ExtractedData } from 'sillytavern-utils-lib/types';
 import { POPUP_TYPE } from 'sillytavern-utils-lib/types/popup';
 import { DEFAULT_LOREBOOK_DEFINITION, DEFAULT_LOREBOOK_RULES, DEFAULT_ST_DESCRIPTION } from './constants.js';
@@ -28,6 +34,12 @@ const globalContext = SillyTavern.getContext();
 const KEYS = {
   EXTENSION: 'worldInfoRecommender',
 } as const;
+
+interface Session {
+  suggestedEntries: Record<string, WIEntry[]>;
+  blackListedEntries: string[];
+  selectedWorldNames: string[];
+}
 
 interface ContextToSend {
   stDescription: boolean;
@@ -215,6 +227,12 @@ async function handleUIChanges(): Promise<void> {
       },
     );
 
+    const avatar = st_getCharaFilename(this_chid);
+    if (!avatar) {
+      st_echo('warning', 'No active character found.');
+      return;
+    }
+
     const stDescriptionCheckbox = popupContainer.find('#worldInfoRecommend_stDescription');
     const messagesContainer = popupContainer.find('.message-options');
     const charCardCheckbox = popupContainer.find('#worldInfoRecommend_charCard');
@@ -225,20 +243,6 @@ async function handleUIChanges(): Promise<void> {
     charCardCheckbox.prop('checked', settings.contextToSend.charCard);
     authorNoteCheckbox.prop('checked', settings.contextToSend.authorNote);
     worldInfoCheckbox.prop('checked', settings.contextToSend.worldInfo);
-    const entriesGroupByWorldName = await getActiveWorldInfo(['all'], this_chid);
-    const allWorldNames = Object.keys(entriesGroupByWorldName);
-    if (allWorldNames.length === 0) {
-      st_echo('warning', 'No active World Info entries found.');
-    }
-    let selectedWorldNames = structuredClone(allWorldNames);
-    buildFancyDropdown('#worldInfoRecommend_worldInfoContainer', {
-      label: 'World Info',
-      initialList: allWorldNames,
-      initialValues: selectedWorldNames,
-      onSelectChange(_previousValues, newValues) {
-        selectedWorldNames = newValues;
-      },
-    });
 
     // Set up message options
     const messageTypeSelect = messagesContainer.find('#messageType');
@@ -363,10 +367,49 @@ async function handleUIChanges(): Promise<void> {
       settingsManager.saveSettings();
     });
 
-    let suggestedEntries: Record<string, WIEntry[]> = {};
-    const blackListedEntries: string[] = [];
+    const entriesGroupByWorldName = await getActiveWorldInfo(['all'], this_chid);
+    const allWorldNames = Object.keys(entriesGroupByWorldName);
+    if (allWorldNames.length === 0) {
+      st_echo('warning', 'No active World Info entries found.');
+    }
+
+    const key = `worldInfoRecommend_${avatar}`;
+    const activeSession: Session = JSON.parse(localStorage.getItem(key) ?? '{}');
+    function saveSession() {
+      localStorage.setItem(key, JSON.stringify(activeSession));
+    }
+
+    if (!activeSession.suggestedEntries) {
+      activeSession.suggestedEntries = {};
+      saveSession();
+    }
+    if (!activeSession.blackListedEntries) {
+      activeSession.blackListedEntries = [];
+      saveSession();
+    }
+    if (!activeSession.selectedWorldNames) {
+      activeSession.selectedWorldNames = structuredClone(allWorldNames);
+      saveSession();
+    }
+
+    buildFancyDropdown('#worldInfoRecommend_worldInfoContainer', {
+      label: 'World Info',
+      initialList: allWorldNames,
+      initialValues: activeSession.selectedWorldNames,
+      onSelectChange(_previousValues, newValues) {
+        activeSession.selectedWorldNames = newValues;
+        saveSession();
+      },
+    });
+
     const sendButton = popupContainer.find('#worldInfoRecommend_sendPrompt');
     const addAllButton = popupContainer.find('#worldInfoRecommend_addAll');
+    const suggestedEntriesContainer = popupContainer.find('#worldInfoRecommend_suggestedEntries');
+    const entryTemplate = popupContainer.find('#worldInfoRecommend_entryTemplate');
+    if (!entryTemplate) {
+      st_echo('warning', 'Missing entry template. Contact developer.');
+      return;
+    }
 
     async function addEntry(
       entry: WIEntry,
@@ -418,10 +461,200 @@ async function handleUIChanges(): Promise<void> {
       if (!skipSave) {
         await globalContext.saveWorldInfo(selectedWorldName, stFormat);
         globalContext.reloadWorldInfoEditor(selectedWorldName, true);
+        saveSession();
       }
 
       return isUpdate ? 'updated' : 'added';
     }
+
+    function applyEntriesToUI(
+      entries: Record<string, WIEntry[]>,
+      lastAddedWorldName: string | null,
+      type: 'initial' | 'classic' = 'classic',
+    ) {
+      Object.entries(entries).forEach(([worldName, entries]) => {
+        entries.forEach((entry) => {
+          let finalWorldName = worldName;
+          let worldIndex = allWorldNames.indexOf(finalWorldName);
+          if (worldIndex === -1) {
+            if (lastAddedWorldName) {
+              finalWorldName = lastAddedWorldName;
+            } else {
+              finalWorldName = allWorldNames.length > 0 ? allWorldNames[0] : '';
+            }
+          }
+          worldIndex = allWorldNames.indexOf(finalWorldName);
+
+          if (!activeSession.suggestedEntries[worldName]) {
+            activeSession.suggestedEntries[worldName] = [];
+          }
+
+          const existingEntry =
+            type === 'initial'
+              ? undefined
+              : activeSession.suggestedEntries[worldName].find(
+                  (e) => e.uid === entry.uid && e.comment === entry.comment,
+                );
+          let node: JQuery<HTMLDivElement> | undefined;
+
+          if (existingEntry) {
+            let query = `.entry[data-id="${entry.uid}"][data-world-name="${worldName}"]`;
+            node = suggestedEntriesContainer.find(query);
+          } else {
+            node = $(entryTemplate.html());
+          }
+          node.attr('data-world-name', worldName);
+          node.attr('data-id', entry.uid.toString());
+          node.attr('data-comment', entry.comment);
+
+          // Update button text based on whether entry exists in current lorebook
+          if (finalWorldName) {
+            const existingInLorebook = entriesGroupByWorldName[finalWorldName]?.find((e) => e.uid === entry.uid);
+            const closestAddButton = node.find('.add');
+            closestAddButton.text(existingInLorebook ? 'Update' : 'Add');
+          }
+
+          // Populate world select dropdown
+          const worldSelect = node.find('.world-select');
+          worldSelect.empty();
+          allWorldNames.forEach((name, index) => {
+            const option = document.createElement('option');
+            option.value = index.toString();
+            option.text = name;
+            worldSelect.append(option);
+          });
+          // Set selected value to the index of the world name
+          if (worldIndex !== -1) {
+            worldSelect.val(worldIndex.toString());
+          }
+
+          // Update button text when world selection changes
+          worldSelect.on('change', function () {
+            const selectedIndex = parseInt($(this).val() as string);
+            if (isNaN(selectedIndex) || selectedIndex < 0 || selectedIndex >= allWorldNames.length) {
+              return;
+            }
+            const selectedWorldName = allWorldNames[selectedIndex];
+            const existingInLorebook = entriesGroupByWorldName[selectedWorldName]?.find(
+              (e) => e.uid === entry.uid && e.comment === entry.comment,
+            );
+            const closestAddButton = node.find('.add');
+            closestAddButton.text(existingInLorebook ? 'Update' : 'Add');
+          });
+
+          node.find('.comment').text(entry.comment);
+          node.find('.key').text(entry.key.join(', '));
+          node.find('.content').text(entry.content);
+          if (type === 'classic') {
+            if (!existingEntry) {
+              activeSession.suggestedEntries[worldName].push(entry);
+            } else {
+              existingEntry.key = entry.key;
+              existingEntry.content = entry.content;
+              existingEntry.comment = entry.comment;
+            }
+          }
+
+          if (!existingEntry) {
+            suggestedEntriesContainer.append(node);
+          }
+        });
+      });
+
+      if (type === 'classic' && Object.keys(entries).length > 0) {
+        saveSession();
+      }
+
+      function remove(entry: JQuery<HTMLDivElement>, blacklist: boolean) {
+        const worldName = entry.data('world-name');
+        const id = entry.data('id');
+        const comment = entry.data('comment');
+        if (!entry || !worldName || id === null || id === undefined || !comment) {
+          if (!worldName) {
+            st_echo('warning', 'Selected entry is missing world name');
+          }
+          return;
+        }
+        if (blacklist) {
+          activeSession.blackListedEntries.push(`${worldName} (${comment})`);
+        }
+        activeSession.suggestedEntries[worldName] = activeSession.suggestedEntries[worldName].filter(
+          (e) => e.uid !== parseInt(id),
+        );
+        entry.remove();
+      }
+
+      suggestedEntriesContainer.find('.blacklist').on('click', (e) => {
+        const entry: JQuery<HTMLDivElement> | null = $(e.currentTarget).closest('.entry');
+        if (!entry) {
+          return;
+        }
+
+        remove(entry, true);
+        saveSession();
+      });
+
+      suggestedEntriesContainer.find('.remove').on('click', (e) => {
+        const entry: JQuery<HTMLDivElement> | null = $(e.currentTarget).closest('.entry');
+        if (!entry) {
+          return;
+        }
+
+        remove(entry, false);
+        saveSession();
+      });
+
+      const addButton = suggestedEntriesContainer.find('.add');
+
+      addButton.on('click', async (e) => {
+        try {
+          addButton.prop('disabled', true);
+          const entry: JQuery<HTMLDivElement> | null = $(e.currentTarget).closest('.entry');
+          if (!entry) {
+            return;
+          }
+          let worldName = entry.data('world-name');
+          const id = entry.data('id');
+          const comment = entry.data('comment');
+          if (!entry || !worldName || id === null || id === undefined || !comment) {
+            if (!worldName) {
+              st_echo('warning', 'Selected entry is missing world name');
+            }
+            return;
+          }
+          const suggestedEntry = structuredClone(
+            activeSession.suggestedEntries[worldName].find((e) => e.uid === parseInt(id)),
+          );
+          if (!suggestedEntry) {
+            return;
+          }
+
+          // Get the selected world index from the dropdown
+          const worldSelect = entry.find('.world-select');
+          const selectedIndex = parseInt(worldSelect.val() as string);
+
+          if (isNaN(selectedIndex) || selectedIndex < 0 || selectedIndex >= allWorldNames.length) {
+            st_echo('warning', 'Please select a valid world');
+            return;
+          }
+
+          // Update the world name with the selected one
+          const selectedWorldName = allWorldNames[selectedIndex];
+          lastAddedWorldName = selectedWorldName;
+
+          remove(entry, false);
+          const status = await addEntry(suggestedEntry, selectedWorldName);
+          st_echo('success', status === 'added' ? 'Entry added' : 'Entry updated');
+        } catch (error: any) {
+          console.error(error);
+          st_echo('error', error instanceof Error ? error.message : error);
+        } finally {
+          addButton.prop('disabled', false);
+        }
+      });
+    }
+
+    applyEntriesToUI(activeSession.suggestedEntries, null, 'initial');
 
     // Add all button handler
     addAllButton.on('click', async () => {
@@ -435,7 +668,10 @@ async function handleUIChanges(): Promise<void> {
         }
 
         // Count total entries to process
-        const totalEntries = Object.values(suggestedEntries).reduce((sum, entries) => sum + entries.length, 0);
+        const totalEntries = Object.values(activeSession.suggestedEntries).reduce(
+          (sum, entries) => sum + entries.length,
+          0,
+        );
 
         if (totalEntries === 0) {
           st_echo('warning', 'No entries to add');
@@ -456,7 +692,7 @@ async function handleUIChanges(): Promise<void> {
         const modifiedWorlds = new Set<string>();
 
         // Process entries
-        for (const [worldName, entries] of Object.entries(suggestedEntries)) {
+        for (const [worldName, entries] of Object.entries(activeSession.suggestedEntries)) {
           if (entries.length === 0) continue;
 
           for (const entry of entries) {
@@ -492,7 +728,8 @@ async function handleUIChanges(): Promise<void> {
         }
 
         // Clear suggested entries after adding all
-        suggestedEntries = {};
+        activeSession.suggestedEntries = {};
+        saveSession();
         popupContainer.find('#worldInfoRecommend_suggestedEntries').empty();
 
         // Show detailed results
@@ -607,11 +844,13 @@ async function handleUIChanges(): Promise<void> {
           });
         }
         if (settings.contextToSend.worldInfo) {
-          if (selectedWorldNames.length > 0) {
+          if (activeSession.selectedWorldNames.length > 0) {
             const template = Handlebars.compile(settings.lorebookDefinitionPrompt, { noEscape: true });
             const lorebooks: Record<string, WIEntry[]> = {};
             Object.entries(entriesGroupByWorldName)
-              .filter(([worldName, entries]) => entries.length > 0 && selectedWorldNames.includes(worldName))
+              .filter(
+                ([worldName, entries]) => entries.length > 0 && activeSession.selectedWorldNames.includes(worldName),
+              )
               .forEach(([worldName, entries]) => {
                 lorebooks[worldName] = entries;
               });
@@ -627,9 +866,9 @@ async function handleUIChanges(): Promise<void> {
           }
         }
 
-        if (blackListedEntries.length > 0) {
+        if (activeSession.blackListedEntries.length > 0) {
           let blackListPrompt = '# Blacklisted Entries:\n';
-          blackListedEntries.forEach((entry) => {
+          activeSession.blackListedEntries.forEach((entry) => {
             blackListPrompt += `- ${entry}\n`;
           });
           messages.push({
@@ -638,12 +877,12 @@ async function handleUIChanges(): Promise<void> {
           });
         }
 
-        if (Object.keys(suggestedEntries).length > 0) {
-          const anySuggested = Object.values(suggestedEntries).some((entries) => entries.length > 0);
+        if (Object.keys(activeSession.suggestedEntries).length > 0) {
+          const anySuggested = Object.values(activeSession.suggestedEntries).some((entries) => entries.length > 0);
           if (anySuggested) {
             const template = Handlebars.compile(settings.lorebookDefinitionPrompt, { noEscape: true });
             const lorebooks: Record<string, WIEntry[]> = {};
-            Object.entries(suggestedEntries)
+            Object.entries(activeSession.suggestedEntries)
               .filter(([_, entries]) => entries.length > 0)
               .forEach(([worldName, entries]) => {
                 lorebooks[worldName] = entries;
@@ -694,174 +933,8 @@ async function handleUIChanges(): Promise<void> {
         });
         // console.log(entries);
 
-        const suggestedEntriesContainer = popupContainer.find('#worldInfoRecommend_suggestedEntries');
-        const entryTemplate = popupContainer.find('#worldInfoRecommend_entryTemplate');
-        if (!entryTemplate) {
-          return;
-        }
         let lastAddedWorldName: string | null = null;
-        Object.entries(entries).forEach(([worldName, entries]) => {
-          entries.forEach((entry) => {
-            let finalWorldName = worldName;
-            let worldIndex = allWorldNames.indexOf(finalWorldName);
-            if (worldIndex === -1) {
-              if (lastAddedWorldName) {
-                finalWorldName = lastAddedWorldName;
-              } else {
-                finalWorldName = allWorldNames.length > 0 ? allWorldNames[0] : '';
-              }
-            }
-            worldIndex = allWorldNames.indexOf(finalWorldName);
-
-            if (!suggestedEntries[worldName]) {
-              suggestedEntries[worldName] = [];
-            }
-
-            const existingEntry = suggestedEntries[worldName].find(
-              (e) => e.uid === entry.uid && e.comment === entry.comment,
-            );
-            let node: JQuery<HTMLDivElement> | undefined;
-
-            if (existingEntry) {
-              let query = `.entry[data-id="${entry.uid}"][data-world-name="${worldName}"]`;
-              node = suggestedEntriesContainer.find(query);
-            } else {
-              node = $(entryTemplate.html());
-            }
-            node.attr('data-world-name', worldName);
-            node.attr('data-id', entry.uid.toString());
-            node.attr('data-comment', entry.comment);
-
-            // Update button text based on whether entry exists in current lorebook
-            if (finalWorldName) {
-              const existingInLorebook = entriesGroupByWorldName[finalWorldName]?.find((e) => e.uid === entry.uid);
-              const closestAddButton = node.find('.add');
-              closestAddButton.text(existingInLorebook ? 'Update' : 'Add');
-            }
-
-            // Populate world select dropdown
-            const worldSelect = node.find('.world-select');
-            worldSelect.empty();
-            allWorldNames.forEach((name, index) => {
-              const option = document.createElement('option');
-              option.value = index.toString();
-              option.text = name;
-              worldSelect.append(option);
-            });
-            // Set selected value to the index of the world name
-            if (worldIndex !== -1) {
-              worldSelect.val(worldIndex.toString());
-            }
-
-            // Update button text when world selection changes
-            worldSelect.on('change', function () {
-              const selectedIndex = parseInt($(this).val() as string);
-              if (isNaN(selectedIndex) || selectedIndex < 0 || selectedIndex >= allWorldNames.length) {
-                return;
-              }
-              const selectedWorldName = allWorldNames[selectedIndex];
-              const existingInLorebook = entriesGroupByWorldName[selectedWorldName]?.find(
-                (e) => e.uid === entry.uid && e.comment === entry.comment,
-              );
-              const closestAddButton = node.find('.add');
-              closestAddButton.text(existingInLorebook ? 'Update' : 'Add');
-            });
-
-            node.find('.comment').text(entry.comment);
-            node.find('.key').text(entry.key.join(', '));
-            node.find('.content').text(entry.content);
-            if (!existingEntry) {
-              suggestedEntries[worldName].push(entry);
-              suggestedEntriesContainer.append(node);
-            } else {
-              existingEntry.key = entry.key;
-              existingEntry.content = entry.content;
-              existingEntry.comment = entry.comment;
-            }
-          });
-        });
-
-        function remove(entry: JQuery<HTMLDivElement>, blacklist: boolean) {
-          const worldName = entry.data('world-name');
-          const id = entry.data('id');
-          const comment = entry.data('comment');
-          if (!entry || !worldName || id === null || id === undefined || !comment) {
-            if (!worldName) {
-              st_echo('warning', 'Selected entry is missing world name');
-            }
-            return;
-          }
-          if (blacklist) {
-            blackListedEntries.push(`${worldName} (${comment})`);
-          }
-          suggestedEntries[worldName] = suggestedEntries[worldName].filter((e) => e.uid !== parseInt(id));
-          entry.remove();
-        }
-
-        suggestedEntriesContainer.find('.blacklist').on('click', (e) => {
-          const entry: JQuery<HTMLDivElement> | null = $(e.currentTarget).closest('.entry');
-          if (!entry) {
-            return;
-          }
-
-          remove(entry, true);
-        });
-
-        suggestedEntriesContainer.find('.remove').on('click', (e) => {
-          const entry: JQuery<HTMLDivElement> | null = $(e.currentTarget).closest('.entry');
-          if (!entry) {
-            return;
-          }
-
-          remove(entry, false);
-        });
-
-        const addButton = suggestedEntriesContainer.find('.add');
-
-        addButton.on('click', async (e) => {
-          try {
-            addButton.prop('disabled', true);
-            const entry: JQuery<HTMLDivElement> | null = $(e.currentTarget).closest('.entry');
-            if (!entry) {
-              return;
-            }
-            let worldName = entry.data('world-name');
-            const id = entry.data('id');
-            const comment = entry.data('comment');
-            if (!entry || !worldName || id === null || id === undefined || !comment) {
-              if (!worldName) {
-                st_echo('warning', 'Selected entry is missing world name');
-              }
-              return;
-            }
-            const suggestedEntry = structuredClone(suggestedEntries[worldName].find((e) => e.uid === parseInt(id)));
-            if (!suggestedEntry) {
-              return;
-            }
-
-            // Get the selected world index from the dropdown
-            const worldSelect = entry.find('.world-select');
-            const selectedIndex = parseInt(worldSelect.val() as string);
-
-            if (isNaN(selectedIndex) || selectedIndex < 0 || selectedIndex >= allWorldNames.length) {
-              st_echo('warning', 'Please select a valid world');
-              return;
-            }
-
-            // Update the world name with the selected one
-            const selectedWorldName = allWorldNames[selectedIndex];
-            lastAddedWorldName = selectedWorldName;
-
-            remove(entry, false);
-            const status = await addEntry(suggestedEntry, selectedWorldName);
-            st_echo('success', status === 'added' ? 'Entry added' : 'Entry updated');
-          } catch (error: any) {
-            console.error(error);
-            st_echo('error', error instanceof Error ? error.message : error);
-          } finally {
-            addButton.prop('disabled', false);
-          }
-        });
+        applyEntriesToUI(entries, lastAddedWorldName, 'classic');
       } catch (error: any) {
         console.error(error);
         st_echo('error', error instanceof Error ? error.message : error);
