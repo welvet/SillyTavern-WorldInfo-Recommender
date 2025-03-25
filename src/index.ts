@@ -7,6 +7,8 @@ import {
   getActiveWorldInfo,
 } from 'sillytavern-utils-lib';
 import {
+  characters,
+  groups,
   selected_group,
   st_createWorldInfoEntry,
   st_echo,
@@ -216,10 +218,12 @@ async function handleUIChanges(): Promise<void> {
     settingsManager.saveSettings();
   });
 
-  const popupIconHtml = `<div class="menu_button fa-brands fa-wpexplorer interactable" title="World Info Recommender"></div>`;
-  popupIcon = $(popupIconHtml);
-  $('.form_create_bottom_buttons_block').prepend(popupIcon);
-  popupIcon.on('click', async () => {
+  const popupIconHtml = `<div class="menu_button fa-brands fa-wpexplorer interactable worldInfoRecommender-icon" title="World Info Recommender"></div>`;
+  $('.form_create_bottom_buttons_block').prepend($(popupIconHtml));
+  $('#GroupFavDelOkBack').prepend($(popupIconHtml));
+  const popupIcons = $('.worldInfoRecommender-icon') as JQuery<HTMLDivElement>;
+  popupIcon = popupIcons.eq(0);
+  popupIcons.on('click', async () => {
     const popupHtml: string = await globalContext.renderExtensionTemplateAsync(
       `third-party/${extensionName}`,
       'templates/popup',
@@ -240,7 +244,27 @@ async function handleUIChanges(): Promise<void> {
       },
     );
 
-    const avatar = st_getCharaFilename(this_chid);
+    const charCardContainer: JQuery<HTMLDivElement> = popupContainer.find('#worldInfoRecommend_charCardContainer');
+    const charCardSelect: JQuery<HTMLSelectElement> = charCardContainer.find('#worldInfoRecommend_charCardSelect');
+    let firstGroupMemberIndex: number | undefined;
+    if (selected_group) {
+      const groupIndex = groups.findIndex((g: any) => g.id === selected_group);
+      const group: { generation_mode: number; members: string[] } = groups[groupIndex];
+      if (group.generation_mode === 0) {
+        // Swap character cards
+        charCardSelect.empty();
+        for (const member of group.members) {
+          const index: number = characters.findIndex((c: any) => c.avatar === member);
+          const name = characters[index].name;
+          charCardSelect.append(`<option value="${index}">${name}</option>`);
+        }
+        charCardContainer.show();
+      } else if (group.members.length > 0) {
+        firstGroupMemberIndex = characters.findIndex((c: any) => c.avatar === group.members[0]);
+      }
+    }
+
+    const avatar = this_chid ? st_getCharaFilename(this_chid) : selected_group;
     if (!avatar) {
       st_echo('warning', 'No active character found.');
       return;
@@ -886,6 +910,7 @@ async function handleUIChanges(): Promise<void> {
           return;
         }
 
+        const selectedCharCard = charCardSelect.val() as string;
         const buildPromptOptions: BuildPromptOptions = {
           presetName: profile.preset,
           contextName: profile.context,
@@ -901,6 +926,9 @@ async function handleUIChanges(): Promise<void> {
                 ? 'preset'
                 : 'active',
           includeNames: !!selected_group,
+          targetCharacterId: selected_group
+            ? ((selectedCharCard ? Number(selectedCharCard) : undefined) ?? firstGroupMemberIndex)
+            : undefined,
         };
 
         // Add message options based on selected type
