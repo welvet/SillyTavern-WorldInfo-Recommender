@@ -1,5 +1,6 @@
 import {
   buildFancyDropdown,
+  buildPresetSelect,
   buildPrompt,
   BuildPromptOptions,
   ExtensionSettingsManager,
@@ -41,6 +42,10 @@ interface Session {
   selectedWorldNames: string[];
 }
 
+interface PromptPreset {
+  content: string;
+}
+
 interface ContextToSend {
   stDescription: boolean;
   messages: {
@@ -73,6 +78,8 @@ interface ExtensionSettings {
   usingDefaultLorebookRulesPrompt: boolean;
   responseRulesPrompt: string;
   usingDefaultResponseRulesPrompt: boolean;
+  promptPreset: string;
+  promptPresets: Record<string, PromptPreset>;
 }
 
 const DEFAULT_SETTINGS: ExtensionSettings = {
@@ -105,6 +112,12 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
   usingDefaultLorebookRulesPrompt: true,
   responseRulesPrompt: DEFAULT_XML_DESCRIPTION,
   usingDefaultResponseRulesPrompt: true,
+  promptPreset: 'default',
+  promptPresets: {
+    default: {
+      content: '',
+    },
+  },
 };
 
 const settingsManager = new ExtensionSettingsManager<ExtensionSettings>(KEYS.EXTENSION, DEFAULT_SETTINGS);
@@ -412,6 +425,55 @@ async function handleUIChanges(): Promise<void> {
         activeSession.selectedWorldNames = newValues;
         saveSession();
       },
+    });
+
+    const promptTextarea = popupContainer.find('#worldInfoRecommend_prompt');
+    buildPresetSelect('#worldInfoRecommenderPopup #worldInfoRecommend_promptPreset', {
+      label: 'prompt',
+      initialValue: settings.promptPreset,
+      initialList: Object.keys(settings.promptPresets),
+      readOnlyValues: ['default'],
+      onSelectChange: async (_previousValue, newValue) => {
+        const newPresetValue = newValue ?? 'default';
+        settings.promptPreset = newPresetValue;
+        settingsManager.saveSettings();
+
+        // Update the prompt textarea with the selected preset content
+
+        promptTextarea.val(settings.promptPresets[newPresetValue]?.content ?? '');
+      },
+      create: {
+        onAfterCreate: (value) => {
+          // When creating a new preset, copy the content from the current preset
+          const currentPreset = settings.promptPresets[settings.promptPreset];
+          settings.promptPresets[value] = {
+            content: currentPreset?.content ?? '',
+          };
+        },
+      },
+      rename: {
+        onAfterRename: (previousValue, newValue) => {
+          // Transfer the content to the new preset name
+          settings.promptPresets[newValue] = settings.promptPresets[previousValue];
+          delete settings.promptPresets[previousValue];
+        },
+      },
+      delete: {
+        onAfterDelete: (value) => {
+          // Remove the deleted preset
+          delete settings.promptPresets[value];
+        },
+      },
+    });
+
+    // Set initial value for prompt textarea based on selected preset
+    promptTextarea.val(settings.promptPresets[settings.promptPreset]?.content ?? '');
+
+    // Save prompt content to the current preset when it changes
+    promptTextarea.on('change', function () {
+      const content = $(this).val() as string;
+      settings.promptPresets[settings.promptPreset].content = content;
+      settingsManager.saveSettings();
     });
 
     const sendButton = popupContainer.find('#worldInfoRecommend_sendPrompt');
@@ -809,7 +871,7 @@ async function handleUIChanges(): Promise<void> {
           return;
         }
 
-        let prompt = popupContainer.find('#worldInfoRecommend_prompt').val() as string;
+        let prompt = promptTextarea.val() as string;
         if (!prompt) {
           return;
         }

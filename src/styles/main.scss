@@ -208,6 +208,11 @@
         width: unset;
     }
 
+    #worldInfoRecommend_promptPreset {
+        margin-bottom: 10px;
+        width: 100%;
+      }
+
     button:disabled {
         opacity: 0.5;
         cursor: not-allowed;

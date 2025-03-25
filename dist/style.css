@@ -179,6 +179,10 @@
 #worldInfoRecommenderPopup #worldInfoRecommend_sendPrompt {
   width: unset;
 }
+#worldInfoRecommenderPopup #worldInfoRecommend_promptPreset {
+  margin-bottom: 10px;
+  width: 100%;
+}
 #worldInfoRecommenderPopup button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
