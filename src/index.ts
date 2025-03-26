@@ -62,6 +62,7 @@ interface ContextToSend {
   charCard: boolean;
   authorNote: boolean;
   worldInfo: boolean;
+  suggestedEntries: boolean;
 }
 
 interface ExtensionSettings {
@@ -105,6 +106,7 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
     charCard: true,
     authorNote: true,
     worldInfo: true,
+    suggestedEntries: true,
   },
   stWorldInfoPrompt: DEFAULT_ST_DESCRIPTION,
   usingDefaultStWorldInfoPrompt: true,
@@ -275,11 +277,13 @@ async function handleUIChanges(): Promise<void> {
     const charCardCheckbox = popupContainer.find('#worldInfoRecommend_charCard');
     const authorNoteCheckbox = popupContainer.find('#worldInfoRecommend_authorNote');
     const worldInfoCheckbox = popupContainer.find('#worldInfoRecommend_worldInfo');
+    const suggestedEntriesCheckbox = popupContainer.find('#worldInfoRecommend_includeSuggestedEntries');
 
     stDescriptionCheckbox.prop('checked', settings.contextToSend.stDescription);
     charCardCheckbox.prop('checked', settings.contextToSend.charCard);
     authorNoteCheckbox.prop('checked', settings.contextToSend.authorNote);
     worldInfoCheckbox.prop('checked', settings.contextToSend.worldInfo);
+    suggestedEntriesCheckbox.prop('checked', settings.contextToSend.suggestedEntries);
 
     // Set up message options
     const messageTypeSelect = messagesContainer.find('#messageType');
@@ -316,6 +320,10 @@ async function handleUIChanges(): Promise<void> {
     });
     worldInfoCheckbox.on('change', () => {
       settings.contextToSend.worldInfo = worldInfoCheckbox.prop('checked');
+      settingsManager.saveSettings();
+    });
+    suggestedEntriesCheckbox.on('change', () => {
+      settings.contextToSend.suggestedEntries = suggestedEntriesCheckbox.prop('checked');
       settingsManager.saveSettings();
     });
 
@@ -1007,7 +1015,7 @@ async function handleUIChanges(): Promise<void> {
           });
         }
 
-        if (Object.keys(activeSession.suggestedEntries).length > 0) {
+        if (settings.contextToSend.suggestedEntries && Object.keys(activeSession.suggestedEntries).length > 0) {
           const anySuggested = Object.values(activeSession.suggestedEntries).some((entries) => entries.length > 0);
           if (anySuggested) {
             const template = Handlebars.compile(settings.lorebookDefinitionPrompt, { noEscape: true });
