@@ -20,6 +20,7 @@ import { POPUP_TYPE } from 'sillytavern-utils-lib/types/popup';
 import { DEFAULT_LOREBOOK_DEFINITION, DEFAULT_LOREBOOK_RULES, DEFAULT_ST_DESCRIPTION } from './constants.js';
 import { DEFAULT_XML_DESCRIPTION, parseXMLOwn } from './xml.js';
 import { WIEntry } from 'sillytavern-utils-lib/types/world-info';
+import showdown from 'showdown';
 
 // @ts-ignore
 import { Handlebars } from '../../../../../lib.js';
@@ -123,6 +124,8 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
     },
   },
 };
+
+const converter = new showdown.Converter();
 
 const settingsManager = new ExtensionSettingsManager<ExtensionSettings>(KEYS.EXTENSION, DEFAULT_SETTINGS);
 
@@ -650,7 +653,7 @@ async function handleUIChanges(): Promise<void> {
 
           node.find('.comment').text(entry.comment);
           node.find('.key').text(entry.key.join(', '));
-          node.find('.content').text(entry.content);
+          node.find('.content').html(converter.makeHtml(entry.content));
           if (type === 'classic') {
             if (!existingEntry) {
               activeSession.suggestedEntries[worldName].push(entry);
