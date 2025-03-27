@@ -2,6 +2,7 @@ import { buildPrompt, BuildPromptOptions } from 'sillytavern-utils-lib';
 import { ChatCompletionMessage, ExtractedData } from 'sillytavern-utils-lib/types';
 import { parseXMLOwn } from './xml.js';
 import { WIEntry } from 'sillytavern-utils-lib/types/world-info';
+import { st_createWorldInfoEntry } from 'sillytavern-utils-lib/config';
 
 // @ts-ignore
 import { Handlebars } from '../../../../../lib.js';
@@ -181,4 +182,76 @@ export async function runWorldInfoRecommendation({
   });
 
   return parsedEntries;
+}
+
+/**
+ * Adds or updates a World Info entry in memory. Does NOT save immediately.
+ * @param entry The entry data to add/update.
+ * @param targetWorldName The name of the world to add/update the entry in.
+ * @param entriesGroupByWorldName The current state of all world info entries.
+ * @returns The modified entry and its status ('added' or 'updated').
+ * @throws Error if entry creation fails.
+ */
+export function prepareEntryModification(
+  entry: WIEntry,
+  targetWorldName: string,
+  entriesGroupByWorldName: Record<string, WIEntry[]>,
+): { modifiedEntry: WIEntry; status: 'added' | 'updated' } {
+  if (!entriesGroupByWorldName[targetWorldName]) {
+    // If the target world doesn't exist in the current context, create it in memory
+    entriesGroupByWorldName[targetWorldName] = [];
+    // Note: This doesn't create the actual lorebook file if it's brand new.
+    // The save operation later should handle this, assuming the name is valid.
+  }
+
+  const worldEntries = entriesGroupByWorldName[targetWorldName];
+  const existingEntryIndex = worldEntries.findIndex((e) => e.uid === entry.uid);
+  let targetEntry: WIEntry;
+  const isUpdate = existingEntryIndex !== -1;
+
+  if (isUpdate) {
+    targetEntry = worldEntries[existingEntryIndex];
+  } else {
+    // Create a temporary structure mimicking ST's format for st_createWorldInfoEntry
+    const stFormat: { entries: Record<number, WIEntry> } = { entries: {} };
+    worldEntries.forEach((e) => (stFormat.entries[e.uid] = e));
+
+    const newEntry = st_createWorldInfoEntry(targetWorldName, stFormat); // Pass the temporary format
+    if (!newEntry) {
+      throw new Error(`Failed to create a new entry structure in world "${targetWorldName}"`);
+    }
+    // Find the last entry to potentially copy some default properties (like scan_depth etc)
+    const lastEntry = worldEntries.length > 0 ? worldEntries[worldEntries.length - 1] : undefined;
+    if (lastEntry) {
+      // Copy properties BUT keep the new UID
+      const newUid = newEntry.uid;
+      Object.assign(newEntry, lastEntry);
+      newEntry.uid = newUid;
+    }
+    targetEntry = newEntry;
+    // Add the newly created entry structure to our in-memory list for this world
+    worldEntries.push(targetEntry);
+  }
+
+  // Update entry properties from the suggestion
+  targetEntry.key = entry.key;
+  targetEntry.content = entry.content;
+  targetEntry.comment = entry.comment;
+  // Optionally update other fields if the AI could suggest them, e.g.,
+  // targetEntry.scan_depth = entry.scan_depth ?? targetEntry.scan_depth;
+  // targetEntry.selective = entry.selective ?? targetEntry.selective;
+  // ... etc.
+
+  return { modifiedEntry: targetEntry, status: isUpdate ? 'updated' : 'added' };
+}
+
+// Helper for slash command enum provider
+export function provideConnectionProfiles() {
+  const profiles = globalContext.extensionSettings?.connectionManager?.profiles ?? [];
+  return profiles.map((p) => ({
+    value: p.name ?? p.id,
+    valueProvider: (value: string) => {
+      return profiles.find((p) => p.name?.includes(value))?.name;
+    },
+  }));
 }

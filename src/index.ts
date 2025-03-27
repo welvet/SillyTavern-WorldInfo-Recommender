@@ -1,10 +1,4 @@
-import {
-  buildFancyDropdown,
-  buildPresetSelect,
-  BuildPromptOptions,
-  ExtensionSettingsManager,
-  getActiveWorldInfo,
-} from 'sillytavern-utils-lib';
+import { buildFancyDropdown, buildPresetSelect, BuildPromptOptions, getActiveWorldInfo } from 'sillytavern-utils-lib';
 import {
   characters,
   groups,
@@ -20,97 +14,20 @@ import { DEFAULT_XML_DESCRIPTION } from './xml.js';
 import { WIEntry } from 'sillytavern-utils-lib/types/world-info';
 import showdown from 'showdown';
 
+import { globalContext, runWorldInfoRecommendation, Session } from './generate.js';
+import { initializeCommands, setPopupIcon } from './commands.js';
+
 // @ts-ignore
 import { Handlebars } from '../../../../../lib.js';
-import {
-  ContextToSend,
-  globalContext,
-  runWorldInfoRecommendation,
-  RunWorldInfoRecommendationParams,
-  Session,
-} from './generate.js';
+import { extensionName, settingsManager } from './settings.js';
 if (!Handlebars.helpers['join']) {
   Handlebars.registerHelper('join', function (array: any, separator: any) {
     return array.join(separator);
   });
 }
 
-const extensionName = 'SillyTavern-WorldInfo-Recommender';
-const VERSION = '0.1.1';
-const FORMAT_VERSION = 'F_1.0';
-
-const KEYS = {
-  EXTENSION: 'worldInfoRecommender',
-} as const;
-
-interface PromptPreset {
-  content: string;
-}
-
-interface ExtensionSettings {
-  version: string;
-  formatVersion: string;
-  profileId: string;
-  maxContextType: 'profile' | 'sampler' | 'custom';
-  maxContextValue: number;
-  maxResponseToken: number;
-  contextToSend: ContextToSend;
-  stWorldInfoPrompt: string;
-  usingDefaultStWorldInfoPrompt: boolean;
-  lorebookDefinitionPrompt: string;
-  usingDefaultLorebookDefinitionPrompt: boolean;
-  lorebookRulesPrompt: string;
-  usingDefaultLorebookRulesPrompt: boolean;
-  responseRulesPrompt: string;
-  usingDefaultResponseRulesPrompt: boolean;
-  promptPreset: string;
-  promptPresets: Record<string, PromptPreset>;
-}
-
-const DEFAULT_SETTINGS: ExtensionSettings = {
-  version: VERSION,
-  formatVersion: FORMAT_VERSION,
-  profileId: '',
-  maxContextType: 'profile',
-  maxContextValue: 16384,
-  maxResponseToken: 1024,
-  contextToSend: {
-    stDescription: true,
-    messages: {
-      type: 'all',
-      first: 10,
-      last: 10,
-      range: {
-        start: 0,
-        end: 10,
-      },
-    },
-    charCard: true,
-    authorNote: true,
-    worldInfo: true,
-    suggestedEntries: true,
-  },
-  stWorldInfoPrompt: DEFAULT_ST_DESCRIPTION,
-  usingDefaultStWorldInfoPrompt: true,
-  lorebookDefinitionPrompt: DEFAULT_LOREBOOK_DEFINITION,
-  usingDefaultLorebookDefinitionPrompt: true,
-  lorebookRulesPrompt: DEFAULT_LOREBOOK_RULES,
-  usingDefaultLorebookRulesPrompt: true,
-  responseRulesPrompt: DEFAULT_XML_DESCRIPTION,
-  usingDefaultResponseRulesPrompt: true,
-  promptPreset: 'default',
-  promptPresets: {
-    default: {
-      content: '',
-    },
-  },
-};
-
 const converter = new showdown.Converter();
 
-const settingsManager = new ExtensionSettingsManager<ExtensionSettings>(KEYS.EXTENSION, DEFAULT_SETTINGS);
-
-let popupIcon: JQuery<HTMLDivElement> | undefined;
 async function handleUIChanges(): Promise<void> {
   const settingsHtml: string = await globalContext.renderExtensionTemplateAsync(
     `third-party/${extensionName}`,
@@ -208,7 +125,7 @@ async function handleUIChanges(): Promise<void> {
   $('.form_create_bottom_buttons_block').prepend($(popupIconHtml));
   $('#GroupFavDelOkBack').prepend($(popupIconHtml));
   const popupIcons = $('.worldInfoRecommender-icon') as JQuery<HTMLDivElement>;
-  popupIcon = popupIcons.eq(0);
+  setPopupIcon(popupIcons.eq(0));
   popupIcons.on('click', async () => {
     const popupHtml: string = await globalContext.renderExtensionTemplateAsync(
       `third-party/${extensionName}`,
@@ -982,25 +899,6 @@ async function handleUIChanges(): Promise<void> {
     });
   });
 }
-function initializeEvents() {}
-function initializeCommands() {
-  globalContext.SlashCommandParser.addCommandObject(
-    globalContext.SlashCommand.fromProps({
-      name: 'world-info-recommender-popup-open',
-      helpString: 'Open World Info Recommender popup',
-      unnamedArgumentList: [],
-      callback: async (_args: any, _value: any) => {
-        if (popupIcon) {
-          popupIcon.trigger('click');
-          return true;
-        }
-
-        return false;
-      },
-      returns: globalContext.ARGUMENT_TYPE.BOOLEAN,
-    }),
-  );
-}
 
 function stagingCheck(): boolean {
   if (!globalContext.ConnectionManagerRequestService) {
@@ -1024,7 +922,6 @@ function stagingCheck(): boolean {
 
 function main() {
   handleUIChanges();
-  initializeEvents();
   initializeCommands();
 }
 
