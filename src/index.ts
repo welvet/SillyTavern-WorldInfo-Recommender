@@ -1,7 +1,6 @@
 import {
   buildFancyDropdown,
   buildPresetSelect,
-  buildPrompt,
   BuildPromptOptions,
   ExtensionSettingsManager,
   getActiveWorldInfo,
@@ -15,15 +14,21 @@ import {
   st_getCharaFilename,
   this_chid,
 } from 'sillytavern-utils-lib/config';
-import { ChatCompletionMessage, ExtractedData } from 'sillytavern-utils-lib/types';
 import { POPUP_TYPE } from 'sillytavern-utils-lib/types/popup';
 import { DEFAULT_LOREBOOK_DEFINITION, DEFAULT_LOREBOOK_RULES, DEFAULT_ST_DESCRIPTION } from './constants.js';
-import { DEFAULT_XML_DESCRIPTION, parseXMLOwn } from './xml.js';
+import { DEFAULT_XML_DESCRIPTION } from './xml.js';
 import { WIEntry } from 'sillytavern-utils-lib/types/world-info';
 import showdown from 'showdown';
 
 // @ts-ignore
 import { Handlebars } from '../../../../../lib.js';
+import {
+  ContextToSend,
+  globalContext,
+  runWorldInfoRecommendation,
+  RunWorldInfoRecommendationParams,
+  Session,
+} from './generate.js';
 if (!Handlebars.helpers['join']) {
   Handlebars.registerHelper('join', function (array: any, separator: any) {
     return array.join(separator);
@@ -33,37 +38,13 @@ if (!Handlebars.helpers['join']) {
 const extensionName = 'SillyTavern-WorldInfo-Recommender';
 const VERSION = '0.1.1';
 const FORMAT_VERSION = 'F_1.0';
-const globalContext = SillyTavern.getContext();
 
 const KEYS = {
   EXTENSION: 'worldInfoRecommender',
 } as const;
 
-interface Session {
-  suggestedEntries: Record<string, WIEntry[]>;
-  blackListedEntries: string[];
-  selectedWorldNames: string[];
-}
-
 interface PromptPreset {
   content: string;
-}
-
-interface ContextToSend {
-  stDescription: boolean;
-  messages: {
-    type: 'none' | 'all' | 'first' | 'last' | 'range';
-    first?: number;
-    last?: number;
-    range?: {
-      start: number;
-      end: number;
-    };
-  };
-  charCard: boolean;
-  authorNote: boolean;
-  worldInfo: boolean;
-  suggestedEntries: boolean;
 }
 
 interface ExtensionSettings {
@@ -892,35 +873,35 @@ async function handleUIChanges(): Promise<void> {
     });
 
     sendButton.on('click', async () => {
+      sendButton.prop('disabled', true);
+      let lastAddedWorldName: string | null = null;
+
       try {
-        sendButton.prop('disabled', true);
+        const prompt = promptTextarea.val() as string;
+
         if (!settings.profileId) {
+          st_echo('warning', 'Please select a connection profile.');
           return;
         }
+        if (!prompt) {
+          st_echo('warning', 'Please enter a prompt.');
+          return;
+        }
+
+        const selectedCharCard = charCardSelect.val() as string;
+        const targetCharacterId = selected_group
+          ? ((selectedCharCard ? Number(selectedCharCard) : undefined) ?? firstGroupMemberIndex)
+          : undefined;
+
         const context = SillyTavern.getContext();
         const profile = context.extensionSettings.connectionManager?.profiles?.find(
           (profile) => profile.id === settings.profileId,
         );
         if (!profile) {
+          st_echo('warning', 'Connection profile not found.');
           return;
         }
 
-        let prompt = promptTextarea.val() as string;
-        if (!prompt) {
-          return;
-        }
-        prompt = globalContext.substituteParams(prompt.trim());
-        if (!prompt) {
-          return;
-        }
-
-        const messages: ChatCompletionMessage[] = [];
-        const selectedApi = profile.api ? globalContext.CONNECT_API_MAP[profile.api].selected : undefined;
-        if (!selectedApi) {
-          return;
-        }
-
-        const selectedCharCard = charCardSelect.val() as string;
         const buildPromptOptions: BuildPromptOptions = {
           presetName: profile.preset,
           contextName: profile.context,
@@ -936,18 +917,13 @@ async function handleUIChanges(): Promise<void> {
                 ? 'preset'
                 : 'active',
           includeNames: !!selected_group,
-          targetCharacterId: selected_group
-            ? ((selectedCharCard ? Number(selectedCharCard) : undefined) ?? firstGroupMemberIndex)
-            : undefined,
+          targetCharacterId: targetCharacterId,
         };
 
-        // Add message options based on selected type
+        // Add message range options
         switch (settings.contextToSend.messages.type) {
           case 'none':
-            buildPromptOptions.messageIndexesBetween = {
-              start: -1,
-              end: -1,
-            };
+            buildPromptOptions.messageIndexesBetween = { start: -1, end: -1 };
             break;
           case 'first':
             buildPromptOptions.messageIndexesBetween = {
@@ -957,9 +933,10 @@ async function handleUIChanges(): Promise<void> {
             break;
           case 'last':
             const lastCount = settings.contextToSend.messages.last ?? 10;
+            const chatLength = context.chat?.length ?? 0;
             buildPromptOptions.messageIndexesBetween = {
-              end: context.chat.length - 1,
-              start: context.chat.length - lastCount,
+              end: Math.max(0, chatLength - 1),
+              start: Math.max(0, chatLength - lastCount),
             };
             break;
           case 'range':
@@ -975,109 +952,30 @@ async function handleUIChanges(): Promise<void> {
             break;
         }
 
-        messages.push(...(await buildPrompt(selectedApi, buildPromptOptions)));
-
-        if (settings.contextToSend.stDescription) {
-          messages.push({
-            role: 'system',
-            content: settings.stWorldInfoPrompt,
-          });
-        }
-        if (settings.contextToSend.worldInfo) {
-          if (activeSession.selectedWorldNames.length > 0) {
-            const template = Handlebars.compile(settings.lorebookDefinitionPrompt, { noEscape: true });
-            const lorebooks: Record<string, WIEntry[]> = {};
-            Object.entries(entriesGroupByWorldName)
-              .filter(
-                ([worldName, entries]) => entries.length > 0 && activeSession.selectedWorldNames.includes(worldName),
-              )
-              .forEach(([worldName, entries]) => {
-                lorebooks[worldName] = entries;
-              });
-
-            const worldInfoPrompt = template({ lorebooks });
-
-            if (worldInfoPrompt) {
-              messages.push({
-                role: 'assistant',
-                content: `=== CURRENT LOREBOOKS ===\n${worldInfoPrompt}`,
-              });
-            }
-          }
-        }
-
-        if (activeSession.blackListedEntries.length > 0) {
-          let blackListPrompt = '# Blacklisted Entries:\n';
-          activeSession.blackListedEntries.forEach((entry) => {
-            blackListPrompt += `- ${entry}\n`;
-          });
-          messages.push({
-            role: 'system',
-            content: blackListPrompt,
-          });
-        }
-
-        if (settings.contextToSend.suggestedEntries && Object.keys(activeSession.suggestedEntries).length > 0) {
-          const anySuggested = Object.values(activeSession.suggestedEntries).some((entries) => entries.length > 0);
-          if (anySuggested) {
-            const template = Handlebars.compile(settings.lorebookDefinitionPrompt, { noEscape: true });
-            const lorebooks: Record<string, WIEntry[]> = {};
-            Object.entries(activeSession.suggestedEntries)
-              .filter(([_, entries]) => entries.length > 0)
-              .forEach(([worldName, entries]) => {
-                lorebooks[worldName] = entries;
-              });
-
-            const suggestedPromptrompt = template({ lorebooks });
-
-            messages.push({
-              role: 'system',
-              content: `=== Already suggested entries ===\n${suggestedPromptrompt}`,
-            });
-          }
-        }
-
-        const userPrompt = `${settings.responseRulesPrompt}\n\n${settings.lorebookRulesPrompt}\n\nYour task:\n${prompt}`;
-        messages.push({
-          role: 'user',
-          content: userPrompt,
+        const resultingEntries = await runWorldInfoRecommendation({
+          profileId: settings.profileId,
+          userPrompt: prompt,
+          buildPromptOptions: buildPromptOptions,
+          contextToSend: settings.contextToSend,
+          session: activeSession,
+          entriesGroupByWorldName: entriesGroupByWorldName,
+          promptSettings: {
+            stWorldInfoPrompt: settings.stWorldInfoPrompt,
+            lorebookDefinitionPrompt: settings.lorebookDefinitionPrompt,
+            responseRulesPrompt: settings.responseRulesPrompt,
+            lorebookRulesPrompt: settings.lorebookRulesPrompt,
+          },
+          maxResponseToken: settings.maxResponseToken,
         });
 
-        const response = (await globalContext.ConnectionManagerRequestService.sendRequest(
-          profile.id,
-          messages,
-          settings.maxResponseToken,
-        )) as ExtractedData;
-        // console.log(response.content);
-        const entries = parseXMLOwn(response.content);
-        if (Object.keys(entries).length === 0) {
-          st_echo('warning', 'No entries in response');
-          return;
+        if (Object.keys(resultingEntries).length > 0) {
+          applyEntriesToUI(resultingEntries, lastAddedWorldName, 'classic');
+        } else {
+          st_echo('warning', 'No results from AI');
         }
-        // Set "key" and "comment" if missing
-        Object.entries(entries).forEach(([worldName, entries]) => {
-          if (!entriesGroupByWorldName[worldName]) {
-            return;
-          }
-          entries.forEach((entry) => {
-            const existentWI = entriesGroupByWorldName[worldName]?.find((e) => e.uid === entry.uid);
-            if (existentWI) {
-              if (entry.key.length === 0) {
-                entry.key = existentWI.key;
-              }
-              if (!entry.comment) {
-                entry.comment = existentWI.comment;
-              }
-            }
-          });
-        });
-        // console.log(entries);
-
-        let lastAddedWorldName: string | null = null;
-        applyEntriesToUI(entries, lastAddedWorldName, 'classic');
       } catch (error: any) {
         console.error(error);
-        st_echo('error', error instanceof Error ? error.message : error);
+        st_echo('error', error instanceof Error ? error.message : String(error));
       } finally {
         sendButton.prop('disabled', false);
       }
