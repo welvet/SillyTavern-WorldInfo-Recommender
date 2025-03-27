@@ -453,7 +453,6 @@ async function handleUIChanges(): Promise<void> {
     }
 
     const { selectAll } = buildFancyDropdown('#worldInfoRecommend_worldInfoContainer', {
-      label: 'World Info',
       initialList: allWorldNames,
       initialValues: activeSession.selectedWorldNames,
       onSelectChange(_previousValues, newValues) {
