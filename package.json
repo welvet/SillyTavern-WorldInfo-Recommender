@@ -38,6 +38,6 @@
     "dependencies": {
         "fast-xml-parser": "^5.0.9",
         "showdown": "^2.1.0",
-        "sillytavern-utils-lib": "^1.0.31"
+        "sillytavern-utils-lib": "^1.0.33"
     }
 }
