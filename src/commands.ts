@@ -21,7 +21,13 @@ export function setPopupIcon(icon: JQuery<HTMLDivElement>) {
 
 export function initializeCommands() {
   /**
-   * @param input Example: '[1, 2, 3]' or ['"with space", withoutspace'] or ['1,2,3', '4,5,6']
+   * Parses a string or array of strings into a list, handling various quoting styles.
+   * @param input Examples:
+   *  - '[1, 2, 3]'
+   *  - ['"with space", withoutspace']
+   *  - ["'single quote'", '"double quote"']
+   *  - ['1,2,3', '4,5,6']
+   *  - ['nested "quotes in" items']
    */
   function parseList(input?: string | string[]): string[] | null {
     if (!input) {
@@ -29,27 +35,47 @@ export function initializeCommands() {
     }
 
     const result: string[] = [];
-
-    // If input is a string, convert to array
     const inputArray = Array.isArray(input) ? input : [input];
 
-    inputArray.forEach((str) => {
-      // If the string looks like an array literal, parse it
-      if (str.startsWith('[') && str.endsWith(']')) {
-        str = str.slice(1, -1);
+    for (const str of inputArray) {
+      let workStr = str.trim();
+
+      // Remove array brackets if present
+      if (workStr.startsWith('[') && workStr.endsWith(']')) {
+        workStr = workStr.slice(1, -1);
       }
 
-      // Split and process each item
-      str.split(',').forEach((item) => {
-        item = item.trim();
-        if (item.startsWith('"') && item.endsWith('"')) {
-          item = item.slice(1, -1);
+      let current = '';
+      let inQuotes = false;
+      let quoteChar = '';
+
+      for (let i = 0; i < workStr.length; i++) {
+        const char = workStr[i];
+
+        if (char === '"' || char === "'") {
+          if (i > 0 && workStr[i - 1] === '\\') {
+            current = current.slice(0, -1) + char; // Remove the escape character and add the quote
+          } else if (!inQuotes) {
+            inQuotes = true;
+            quoteChar = char;
+          } else if (char === quoteChar) {
+            inQuotes = false;
+            if (current.trim()) result.push(current.trim());
+            current = '';
+            quoteChar = '';
+          } else {
+            current += char;
+          }
+        } else if (char === ',' && !inQuotes) {
+          if (current.trim()) result.push(current.trim());
+          current = '';
+        } else {
+          current += char;
         }
-        if (item) {
-          result.push(item);
-        }
-      });
-    });
+      }
+
+      if (current.trim()) result.push(current.trim());
+    }
 
     return result;
   }
