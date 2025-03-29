@@ -1,4 +1,4 @@
-# SillyTavern World Info Recommender
+# SillyTavern World Info Recommender (WREC)
 
 **To use the extension, you need to be on the `staging` branch of SillyTavern.**
 
