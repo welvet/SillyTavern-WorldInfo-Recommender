@@ -1,12 +1,12 @@
 import { buildFancyDropdown, buildPresetSelect, BuildPromptOptions, getActiveWorldInfo } from 'sillytavern-utils-lib';
 import {
-  characters,
   groups,
   selected_group,
   st_createWorldInfoEntry,
   st_echo,
   st_getCharaFilename,
   this_chid,
+  world_names,
 } from 'sillytavern-utils-lib/config';
 import { POPUP_TYPE } from 'sillytavern-utils-lib/types/popup';
 import { DEFAULT_LOREBOOK_DEFINITION, DEFAULT_LOREBOOK_RULES, DEFAULT_ST_DESCRIPTION } from './constants.js';
@@ -124,6 +124,7 @@ async function handleUIChanges(): Promise<void> {
   const popupIconHtml = `<div class="menu_button fa-brands fa-wpexplorer interactable worldInfoRecommender-icon" title="World Info Recommender"></div>`;
   $('.form_create_bottom_buttons_block').prepend($(popupIconHtml));
   $('#GroupFavDelOkBack').prepend($(popupIconHtml));
+  $('#form_character_search_form').prepend(popupIconHtml);
   const popupIcons = $('.worldInfoRecommender-icon') as JQuery<HTMLDivElement>;
   setPopupIcon(popupIcons.eq(0));
   popupIcons.on('click', async () => {
@@ -147,6 +148,7 @@ async function handleUIChanges(): Promise<void> {
       },
     );
 
+    const context = SillyTavern.getContext();
     const charCardContainer: JQuery<HTMLDivElement> = popupContainer.find('#worldInfoRecommend_charCardContainer');
     const charCardSelect: JQuery<HTMLSelectElement> = charCardContainer.find('#worldInfoRecommend_charCardSelect');
     let firstGroupMemberIndex: number | undefined;
@@ -157,24 +159,23 @@ async function handleUIChanges(): Promise<void> {
         // Swap character cards
         charCardSelect.empty();
         for (const member of group.members) {
-          const index: number = characters.findIndex((c: any) => c.avatar === member);
-          const name = characters[index].name;
+          const index: number = context.characters.findIndex((c: any) => c.avatar === member);
+          const name = context.characters[index].name;
           charCardSelect.append(`<option value="${index}">${name}</option>`);
         }
         charCardContainer.show();
       } else if (group.members.length > 0) {
-        firstGroupMemberIndex = characters.findIndex((c: any) => c.avatar === group.members[0]);
+        firstGroupMemberIndex = context.characters.findIndex((c: any) => c.avatar === group.members[0]);
       }
     }
 
     const avatar = this_chid ? st_getCharaFilename(this_chid) : selected_group;
-    if (!avatar) {
-      st_echo('warning', 'No active character found.');
-      return;
-    }
 
     const stDescriptionCheckbox = popupContainer.find('#worldInfoRecommend_stDescription');
     const messagesContainer = popupContainer.find('.message-options');
+    if (!avatar) {
+      messagesContainer.hide();
+    }
     const charCardCheckbox = popupContainer.find('#worldInfoRecommend_charCard');
     const authorNoteCheckbox = popupContainer.find('#worldInfoRecommend_authorNote');
     const worldInfoCheckbox = popupContainer.find('#worldInfoRecommend_worldInfo');
@@ -313,13 +314,23 @@ async function handleUIChanges(): Promise<void> {
       settingsManager.saveSettings();
     });
 
-    const entriesGroupByWorldName = await getActiveWorldInfo(['all'], this_chid);
+    let entriesGroupByWorldName: Record<string, WIEntry[]> = {};
+    if (avatar) {
+      entriesGroupByWorldName = await getActiveWorldInfo(['all'], this_chid);
+    } else {
+      for (const worldName of world_names) {
+        const worldInfo = await globalContext.loadWorldInfo(worldName);
+        if (worldInfo) {
+          entriesGroupByWorldName[worldName] = Object.values(worldInfo.entries);
+        }
+      }
+    }
     const allWorldNames = Object.keys(entriesGroupByWorldName);
     if (allWorldNames.length === 0) {
       st_echo('warning', 'No active World Info entries found.');
     }
 
-    const key = `worldInfoRecommend_${avatar}`;
+    const key = `worldInfoRecommend_${avatar ?? '_global'}`;
     const activeSession: Session = JSON.parse(localStorage.getItem(key) ?? '{}');
     function saveSession() {
       localStorage.setItem(key, JSON.stringify(activeSession));
@@ -334,7 +345,7 @@ async function handleUIChanges(): Promise<void> {
       saveSession();
     }
     if (!activeSession.selectedWorldNames) {
-      activeSession.selectedWorldNames = structuredClone(allWorldNames);
+      activeSession.selectedWorldNames = avatar ? structuredClone(allWorldNames) : [];
       saveSession();
     }
 
@@ -357,6 +368,7 @@ async function handleUIChanges(): Promise<void> {
         activeSession.selectedWorldNames = newValues;
         saveSession();
       },
+      enableSearch: allWorldNames.length > 10,
     });
 
     const promptTextarea = popupContainer.find('#worldInfoRecommend_prompt');
@@ -837,36 +849,40 @@ async function handleUIChanges(): Promise<void> {
           targetCharacterId: targetCharacterId,
         };
 
-        // Add message range options
-        switch (settings.contextToSend.messages.type) {
-          case 'none':
-            buildPromptOptions.messageIndexesBetween = { start: -1, end: -1 };
-            break;
-          case 'first':
-            buildPromptOptions.messageIndexesBetween = {
-              start: 0,
-              end: settings.contextToSend.messages.first ?? 10,
-            };
-            break;
-          case 'last':
-            const lastCount = settings.contextToSend.messages.last ?? 10;
-            const chatLength = context.chat?.length ?? 0;
-            buildPromptOptions.messageIndexesBetween = {
-              end: Math.max(0, chatLength - 1),
-              start: Math.max(0, chatLength - lastCount),
-            };
-            break;
-          case 'range':
-            if (settings.contextToSend.messages.range) {
+        // Add message range options if character/group is selected
+        if (!avatar) {
+          buildPromptOptions.messageIndexesBetween = { start: -1, end: -1 };
+        } else {
+          switch (settings.contextToSend.messages.type) {
+            case 'none':
+              buildPromptOptions.messageIndexesBetween = { start: -1, end: -1 };
+              break;
+            case 'first':
               buildPromptOptions.messageIndexesBetween = {
-                start: settings.contextToSend.messages.range.start,
-                end: settings.contextToSend.messages.range.end,
+                start: 0,
+                end: settings.contextToSend.messages.first ?? 10,
               };
-            }
-            break;
-          case 'all':
-          default:
-            break;
+              break;
+            case 'last':
+              const lastCount = settings.contextToSend.messages.last ?? 10;
+              const chatLength = context.chat?.length ?? 0;
+              buildPromptOptions.messageIndexesBetween = {
+                end: Math.max(0, chatLength - 1),
+                start: Math.max(0, chatLength - lastCount),
+              };
+              break;
+            case 'range':
+              if (settings.contextToSend.messages.range) {
+                buildPromptOptions.messageIndexesBetween = {
+                  start: settings.contextToSend.messages.range.start,
+                  end: settings.contextToSend.messages.range.end,
+                };
+              }
+              break;
+            case 'all':
+            default:
+              break;
+          }
         }
 
         const resultingEntries = await runWorldInfoRecommendation({
