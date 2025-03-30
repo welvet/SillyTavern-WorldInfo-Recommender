@@ -60,6 +60,7 @@ export function parseXMLOwn(xml: string): Record<string, WIEntry[]> {
         key: entry.triggers?.split(',').map((t: string) => t.trim()) ?? [],
         content: entry.content,
         comment: entry.name,
+        disable: false,
       });
     }
 

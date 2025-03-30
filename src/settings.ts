@@ -4,7 +4,7 @@ import { ContextToSend } from './generate.js';
 import { DEFAULT_XML_DESCRIPTION } from './xml.js';
 
 export const extensionName = 'SillyTavern-WorldInfo-Recommender';
-export const VERSION = '0.1.1';
+export const VERSION = '0.1.2';
 export const FORMAT_VERSION = 'F_1.0';
 
 export const KEYS = {

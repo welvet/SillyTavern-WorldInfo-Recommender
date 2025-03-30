@@ -91,9 +91,12 @@ export async function runWorldInfoRecommendation({
       const template = Handlebars.compile(promptSettings.lorebookDefinitionPrompt, { noEscape: true });
       const lorebooks: Record<string, WIEntry[]> = {};
       Object.entries(entriesGroupByWorldName)
-        .filter(([worldName, entries]) => entries.length > 0 && session.selectedWorldNames.includes(worldName))
+        .filter(
+          ([worldName, entries]) =>
+            entries.length > 0 && session.selectedWorldNames.includes(worldName) && entries.some((e) => !e.disable),
+        )
         .forEach(([worldName, entries]) => {
-          lorebooks[worldName] = entries;
+          lorebooks[worldName] = entries.filter((e) => !e.disable);
         });
 
       const worldInfoPrompt = template({ lorebooks });

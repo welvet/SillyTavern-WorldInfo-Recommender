@@ -90,17 +90,15 @@ Content:
 Lorebooks are essential for long-term storytelling with AI.`;
 
 export const DEFAULT_LOREBOOK_DEFINITION = `{{#each lorebooks}}
-  {{#if this.length}}
 ## WORLD NAME: {{@key}}
-    {{#each this as |entry|}}
-      {{#unless entry.disable}}
-- (NAME: {{entry.comment}}) (ID: {{entry.uid}})
-Triggers: {{join entry.key ', '}}
-Content: {{entry.content}}
+  {{#each this as |entry|}}
+### (NAME: {{#if entry.comment}}{{entry.comment}}{{else}}*No name*{{/if}}) (ID: {{entry.uid}})
+Triggers: {{#if entry.key}}{{join entry.key ', '}}{{else}}*No triggers*{{/if}}
+Content: {{#if entry.content}}{{entry.content}}{{else}}*No content*{{/if}}
 
-      {{/unless}}
-    {{/each}}
-  {{/if}}
+  {{/each}}
+
+
 {{/each}}`;
 
 export const DEFAULT_LOREBOOK_RULES = `- Don't suggest already existing or suggested entries.`;
