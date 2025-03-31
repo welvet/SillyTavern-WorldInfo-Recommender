@@ -14,8 +14,8 @@ import {
 } from './generate.js';
 import { settingsManager } from './settings.js';
 
-let popupIcon: JQuery<HTMLDivElement> | undefined;
-export function setPopupIcon(icon: JQuery<HTMLDivElement>) {
+let popupIcon: HTMLDivElement | undefined;
+export function setPopupIcon(icon: HTMLDivElement) {
   popupIcon = icon;
 }
 
@@ -87,7 +87,7 @@ export function initializeCommands() {
       unnamedArgumentList: [],
       callback: async (_args: any, _value: any) => {
         if (popupIcon) {
-          popupIcon.trigger('click');
+          popupIcon.dispatchEvent(new Event('click', { bubbles: true }));
           return true;
         }
 
