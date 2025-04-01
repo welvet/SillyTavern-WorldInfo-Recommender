@@ -23,6 +23,7 @@ export interface ExtensionSettings {
   maxContextValue: number;
   maxResponseToken: number;
   contextToSend: ContextToSend;
+  showAddWithRegexButton: boolean;
   stWorldInfoPrompt: string;
   usingDefaultStWorldInfoPrompt: boolean;
   lorebookDefinitionPrompt: string;
@@ -58,6 +59,7 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
     worldInfo: true,
     suggestedEntries: true,
   },
+  showAddWithRegexButton: false,
   stWorldInfoPrompt: DEFAULT_ST_DESCRIPTION,
   usingDefaultStWorldInfoPrompt: true,
   lorebookDefinitionPrompt: DEFAULT_LOREBOOK_DEFINITION,

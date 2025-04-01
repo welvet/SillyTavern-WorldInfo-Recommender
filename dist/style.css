@@ -10,8 +10,15 @@
   overflow-y: auto;
 }
 
+.popup-content:has(.regex-popup) {
+  overflow: visible;
+}
+
+.popup-body:has(.regex-popup) {
+  overflow: visible;
+}
+
 #worldInfoRecommenderPopup {
-  padding: 20px;
   color: var(--SmartThemeBodyColor);
   font-family: var(--mainFontFamily);
   max-width: 1200px;

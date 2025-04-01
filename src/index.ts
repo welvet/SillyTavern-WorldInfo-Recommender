@@ -1,14 +1,23 @@
-import { buildFancyDropdown, buildPresetSelect, BuildPromptOptions, getActiveWorldInfo } from 'sillytavern-utils-lib';
+import {
+  buildFancyDropdown,
+  buildPresetSelect,
+  BuildPromptOptions,
+  buildSortableList,
+  getActiveWorldInfo,
+  SortableListItemData,
+} from 'sillytavern-utils-lib';
 import {
   groups,
   selected_group,
   st_createWorldInfoEntry,
   st_echo,
   st_getCharaFilename,
+  st_runRegexScript,
   this_chid,
   world_names,
 } from 'sillytavern-utils-lib/config';
 import { POPUP_TYPE } from 'sillytavern-utils-lib/types/popup';
+import { RegexScriptData } from 'sillytavern-utils-lib/types/regex';
 import { DEFAULT_LOREBOOK_DEFINITION, DEFAULT_LOREBOOK_RULES, DEFAULT_ST_DESCRIPTION } from './constants.js';
 import { DEFAULT_XML_DESCRIPTION } from './xml.js';
 import { WIEntry } from 'sillytavern-utils-lib/types/world-info';
@@ -356,6 +365,15 @@ async function handleUIChanges(): Promise<void> {
         settingsManager.saveSettings();
       });
 
+      const showAddWithRegexButton = settingsContainer.querySelector<HTMLInputElement>(
+        '.showAddWithRegexButton input[type="checkbox"]',
+      );
+      showAddWithRegexButton!.checked = settings.showAddWithRegexButton;
+      showAddWithRegexButton!.addEventListener('change', () => {
+        settings.showAddWithRegexButton = showAddWithRegexButton!.checked;
+        settingsManager.saveSettings();
+      });
+
       let entriesGroupByWorldName: Record<string, WIEntry[]> = {};
       if (avatar) {
         entriesGroupByWorldName = await getActiveWorldInfo(['all'], this_chid);
@@ -390,6 +408,10 @@ async function handleUIChanges(): Promise<void> {
         activeSession.selectedWorldNames = avatar ? structuredClone(allWorldNames) : [];
         saveSession();
       }
+      if (!activeSession.regexIds) {
+        activeSession.regexIds = {};
+        saveSession();
+      }
 
       // Check if selectedWorldNames is a subset of allWorldNames
       const worldNamesMissing = activeSession.selectedWorldNames.filter(
@@ -415,7 +437,6 @@ async function handleUIChanges(): Promise<void> {
 
       const promptTextarea = popupContainer.querySelector<HTMLTextAreaElement>('#worldInfoRecommend_prompt');
       buildPresetSelect('#worldInfoRecommenderPopup #worldInfoRecommend_promptPreset', {
-        label: 'prompt',
         initialValue: settings.promptPreset,
         initialList: Object.keys(settings.promptPresets),
         readOnlyValues: ['default'],
@@ -636,6 +657,237 @@ async function handleUIChanges(): Promise<void> {
               removeButton!.addEventListener('click', (e) => handleRemove(e, false));
               blacklistButton!.addEventListener('click', (e) => handleRemove(e, true));
               addButton!.addEventListener('click', handleAdd);
+
+              // Add regex button handler
+              const addRegexButton = node.querySelector<HTMLButtonElement>('.add-regex');
+              if (!settings.showAddWithRegexButton) {
+                addRegexButton!.style.display = 'none';
+              }
+              addRegexButton!.addEventListener('click', async () => {
+                const uid = parseInt(node.dataset.id ?? '');
+                const worldName = node.dataset.worldName ?? '';
+                const comment = node.dataset.comment;
+                const entry = activeSession.suggestedEntries[worldName]?.find(
+                  (e) => e.uid === uid && e.comment === comment,
+                );
+                if (!entry) return;
+
+                const allRegexes = context.extensionSettings.regex ?? [];
+
+                const initialSortableList: SortableListItemData[] = Object.entries(activeSession.regexIds)
+                  .map(([id, data]) => {
+                    const regex = allRegexes.find((r) => r.id === id);
+                    return regex ? { label: regex.scriptName, id: regex.id, enabled: !data.disabled } : null;
+                  })
+                  .filter((item): item is SortableListItemData => item !== null);
+
+                const initialDropdownValues = initialSortableList.map((item) => item.id);
+
+                const regexDiv = document.createElement('div');
+                regexDiv.classList.add('regex-popup');
+                const regexTitle = document.createElement('h3');
+                regexTitle.textContent = 'Select Regex';
+                regexDiv.appendChild(regexTitle);
+
+                const selectContainer = document.createElement('div');
+                regexDiv.appendChild(selectContainer);
+                const { getValues, setValues } = buildFancyDropdown(selectContainer, {
+                  enableSearch: true,
+                  multiple: true,
+                  initialList: allRegexes.map((r) => ({ label: r.scriptName, value: r.id })),
+                  initialValues: initialDropdownValues,
+                  onSelectChange(previousValues, newValues) {
+                    const addedValues = newValues.filter((value) => !previousValues.includes(value));
+                    const removedValues = previousValues.filter((value) => !newValues.includes(value));
+
+                    // Remove removed values from the list
+                    if (removedValues.length > 0) {
+                      const sortedList = getList();
+                      setList(sortedList.filter((item) => !removedValues.includes(item.id)));
+                      activeSession.regexIds = Object.fromEntries(
+                        Object.entries(activeSession.regexIds).filter(([key]) => !removedValues.includes(key)),
+                      );
+                      saveSession();
+                    }
+
+                    // Add new values to the list
+                    if (addedValues.length > 0) {
+                      const sortedList = getList();
+                      const newItems = addedValues
+                        .map((value) => {
+                          const regex = allRegexes.find((r) => r.id === value);
+                          return regex
+                            ? ({
+                                label: regex.scriptName,
+                                id: value,
+                                enabled: true, // Enable when added via dropdown
+                              } as SortableListItemData)
+                            : null;
+                        })
+                        .filter((item): item is SortableListItemData => item !== null);
+                      setList([...sortedList, ...newItems]);
+                      activeSession.regexIds = {
+                        ...activeSession.regexIds,
+                        ...Object.fromEntries(newItems.map((item) => [item.id, { disabled: false }])),
+                      };
+                      saveSession();
+                    }
+                  },
+                });
+
+                const sortableListContainer = document.createElement('div');
+                regexDiv.appendChild(sortableListContainer);
+                const { getList, getOrder, setList } = buildSortableList(sortableListContainer, {
+                  initialList: initialSortableList,
+                  showDeleteButton: true,
+                  showToggleButton: true,
+                  onDelete(itemId) {
+                    const selectValues = getValues();
+                    setValues(selectValues.filter((value) => value !== itemId));
+
+                    setList(getList().filter((item) => item.id !== itemId));
+                    activeSession.regexIds = Object.fromEntries(
+                      Object.entries(activeSession.regexIds).filter(([key]) => key !== itemId),
+                    );
+                    saveSession();
+                    return true;
+                  },
+                  onOrderChange(newItemOrderIds) {
+                    const newOrder = newItemOrderIds
+                      .map((id) => getList().find((item) => item.id === id))
+                      .filter((item) => item !== undefined);
+                    activeSession.regexIds = Object.fromEntries(
+                      newOrder.map((item) => [item.id, { disabled: !item.enabled }]),
+                    );
+                    saveSession();
+                  },
+                  onToggle(itemId, newState) {
+                    activeSession.regexIds = {
+                      ...activeSession.regexIds,
+                      [itemId]: { disabled: !newState },
+                    };
+                    saveSession();
+                  },
+                });
+
+                const getOrderedRegex = () => {
+                  const order: string[] = getOrder();
+                  const listItems = getList();
+                  const sortedEnabledValues = listItems
+                    .filter((item) => item.enabled)
+                    .sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id))
+                    .map((item) => item.id);
+                  return sortedEnabledValues
+                    .map((id) => allRegexes.find((r) => r.id === id))
+                    .filter((r) => r !== undefined);
+                };
+
+                const getRegexResult = () => {
+                  let result = entry.content;
+                  for (const regex of getOrderedRegex()) {
+                    result = st_runRegexScript(regex, result);
+                  }
+                  return result;
+                };
+
+                const simulateButton = document.createElement('button');
+                simulateButton.textContent = 'Simulate';
+                simulateButton.classList.add('menu_button');
+                regexDiv.appendChild(simulateButton);
+
+                let regexResultTextarea: HTMLTextAreaElement | null = null;
+                simulateButton.addEventListener('click', async () => {
+                  const regexResult = getRegexResult();
+                  regexResultTextarea!.value = regexResult;
+                });
+                regexResultTextarea = document.createElement('textarea');
+                regexResultTextarea.classList.add('text_pole', 'textarea_compact');
+                regexResultTextarea.setAttribute('rows', '5');
+                regexResultTextarea.setAttribute('placeholder', 'Result');
+                regexResultTextarea.value = entry.content;
+                regexDiv.appendChild(regexResultTextarea);
+
+                const confirmed = await globalContext.callGenericPopup(regexDiv, POPUP_TYPE.CONFIRM);
+                if (!confirmed) return;
+
+                const newContent = regexResultTextarea.value;
+
+                const regexMap: Record<string, Partial<RegexScriptData>> = {};
+                getOrderedRegex().forEach((regex) => {
+                  regexMap[regex.id] = { disabled: regex.disabled };
+                });
+                activeSession.regexIds = regexMap;
+                saveSession();
+
+                addRegexButton!.disabled = true;
+                const regularAddButton = node.querySelector<HTMLButtonElement>('.add');
+                regularAddButton!.disabled = true;
+
+                try {
+                  const originalUid = parseInt(node.dataset.id ?? '');
+                  const originalWorldName = node.dataset.worldName ?? '';
+                  const originalComment = node.dataset.comment;
+
+                  if (isNaN(originalUid) || !originalWorldName || !originalComment) {
+                    st_echo('error', 'Could not retrieve original entry details for adding with regex.');
+                    return;
+                  }
+                  const originalSuggestedEntry = activeSession.suggestedEntries[originalWorldName]?.find(
+                    (e) => e.uid === originalUid && e.comment === originalComment,
+                  );
+                  if (!originalSuggestedEntry) {
+                    // Entry might have been removed/added elsewhere. If node exists, remove it.
+                    node.remove();
+                    st_echo('error', 'Original suggested entry not found in session after regex modification.');
+                    saveSession();
+                    return;
+                  }
+
+                  // Get the selected target world from the dropdown within the entry node
+                  const worldSelect = node.querySelector<HTMLSelectElement>('.world-select');
+                  const selectedIndex = parseInt(worldSelect!.value);
+
+                  if (isNaN(selectedIndex) || selectedIndex < 0 || selectedIndex >= allWorldNames.length) {
+                    st_echo('warning', 'Please select a valid world to add the entry to.');
+                    return; // Don't proceed without a valid target world
+                  }
+                  const selectedWorldName = allWorldNames[selectedIndex];
+
+                  // Create a copy of the entry to modify and add
+                  const entryToAdd = structuredClone(originalSuggestedEntry);
+                  entryToAdd.content = newContent; // Apply the regex-modified content
+
+                  // Remove the original entry from the suggestions UI and session *before* adding
+                  node.remove(); // Remove the element from the display
+                  if (activeSession.suggestedEntries[originalWorldName]) {
+                    activeSession.suggestedEntries[originalWorldName] = activeSession.suggestedEntries[
+                      originalWorldName
+                    ].filter((e) => !(e.uid === originalUid && e.comment === originalComment));
+                  }
+
+                  lastAddedWorldName = selectedWorldName;
+                  const status = await addEntry(entryToAdd, selectedWorldName); // This eventually saves session
+
+                  saveSession();
+
+                  st_echo(
+                    'success',
+                    status === 'added'
+                      ? 'Entry added with regex modification'
+                      : 'Entry updated with regex modification',
+                  );
+                } catch (error: any) {
+                  console.error('Error adding entry with regex:', error);
+                  st_echo(
+                    'error',
+                    `Failed to add entry with regex: ${error instanceof Error ? error.message : String(error)}`,
+                  );
+                  saveSession();
+                } finally {
+                  addRegexButton!.disabled = false;
+                  regularAddButton!.disabled = false;
+                }
+              });
             }
           });
         });

@@ -3,6 +3,7 @@ import { ChatCompletionMessage, ExtractedData } from 'sillytavern-utils-lib/type
 import { parseXMLOwn } from './xml.js';
 import { WIEntry } from 'sillytavern-utils-lib/types/world-info';
 import { st_createWorldInfoEntry } from 'sillytavern-utils-lib/config';
+import { RegexScriptData } from 'sillytavern-utils-lib/types/regex';
 
 // @ts-ignore
 import { Handlebars } from '../../../../../lib.js';
@@ -13,6 +14,7 @@ export interface Session {
   suggestedEntries: Record<string, WIEntry[]>;
   blackListedEntries: string[];
   selectedWorldNames: string[];
+  regexIds: Record<string, Partial<RegexScriptData>>;
 }
 
 export interface ContextToSend {

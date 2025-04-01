@@ -386,6 +386,7 @@ export function initializeCommands() {
             selectedWorldNames: targetLorebookNames,
             suggestedEntries: {}, // Start with no pre-existing suggestions
             blackListedEntries: [], // Start with no blacklist
+            regexIds: {}, // Start with no regexes
           };
 
           const parsedMaxResponse = namedArgs['max-response'] ? parseInt(namedArgs['max-response']) : undefined;
