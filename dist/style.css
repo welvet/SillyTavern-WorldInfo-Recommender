@@ -121,6 +121,7 @@
 #worldInfoRecommenderPopup .entry .menu .menu_button {
   padding: 5px 10px;
   font-size: 0.9em;
+  height: fit-content;
 }
 #worldInfoRecommenderPopup .entry .menu .add {
   background-color: var(--active);
