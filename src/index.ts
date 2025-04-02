@@ -365,12 +365,12 @@ async function handleUIChanges(): Promise<void> {
         settingsManager.saveSettings();
       });
 
-      const showAddWithRegexButton = settingsContainer.querySelector<HTMLInputElement>(
-        '.showAddWithRegexButton input[type="checkbox"]',
+      const showEditWithRegexButton = settingsContainer.querySelector<HTMLInputElement>(
+        '.showEditWithRegexButton input[type="checkbox"]',
       );
-      showAddWithRegexButton!.checked = settings.showAddWithRegexButton;
-      showAddWithRegexButton!.addEventListener('change', () => {
-        settings.showAddWithRegexButton = showAddWithRegexButton!.checked;
+      showEditWithRegexButton!.checked = settings.showEditWithRegexButton;
+      showEditWithRegexButton!.addEventListener('change', () => {
+        settings.showEditWithRegexButton = showEditWithRegexButton!.checked;
         settingsManager.saveSettings();
       });
 
@@ -658,19 +658,30 @@ async function handleUIChanges(): Promise<void> {
               blacklistButton!.addEventListener('click', (e) => handleRemove(e, true));
               addButton!.addEventListener('click', handleAdd);
 
-              // Add regex button handler
-              const addRegexButton = node.querySelector<HTMLButtonElement>('.add-regex');
-              if (!settings.showAddWithRegexButton) {
-                addRegexButton!.style.display = 'none';
+              const editRegexButton = node.querySelector<HTMLButtonElement>('.edit-regex');
+              if (!settings.showEditWithRegexButton) {
+                editRegexButton!.style.display = 'none';
               }
-              addRegexButton!.addEventListener('click', async () => {
+              editRegexButton!.addEventListener('click', async () => {
                 const uid = parseInt(node.dataset.id ?? '');
                 const worldName = node.dataset.worldName ?? '';
                 const comment = node.dataset.comment;
-                const entry = activeSession.suggestedEntries[worldName]?.find(
+
+                const entryIndex = activeSession.suggestedEntries[worldName]?.findIndex(
                   (e) => e.uid === uid && e.comment === comment,
                 );
-                if (!entry) return;
+                const entry =
+                  entryIndex !== undefined && entryIndex !== -1
+                    ? activeSession.suggestedEntries[worldName][entryIndex]
+                    : undefined;
+
+                if (!entry) {
+                  st_echo('error', 'Original suggested entry not found in session for regex editing.');
+                  // Entry might have been removed/added elsewhere. If node exists, remove it.
+                  node.remove();
+                  saveSession(); // Save the removal if it happened concurrently
+                  return;
+                }
 
                 const allRegexes = context.extensionSettings.regex ?? [];
 
@@ -686,7 +697,7 @@ async function handleUIChanges(): Promise<void> {
                 const regexDiv = document.createElement('div');
                 regexDiv.classList.add('regex-popup');
                 const regexTitle = document.createElement('h3');
-                regexTitle.textContent = 'Select Regex';
+                regexTitle.textContent = 'Edit Suggestion with Regex';
                 regexDiv.appendChild(regexTitle);
 
                 const selectContainer = document.createElement('div');
@@ -700,7 +711,6 @@ async function handleUIChanges(): Promise<void> {
                     const addedValues = newValues.filter((value) => !previousValues.includes(value));
                     const removedValues = previousValues.filter((value) => !newValues.includes(value));
 
-                    // Remove removed values from the list
                     if (removedValues.length > 0) {
                       const sortedList = getList();
                       setList(sortedList.filter((item) => !removedValues.includes(item.id)));
@@ -710,7 +720,6 @@ async function handleUIChanges(): Promise<void> {
                       saveSession();
                     }
 
-                    // Add new values to the list
                     if (addedValues.length > 0) {
                       const sortedList = getList();
                       const newItems = addedValues
@@ -720,7 +729,7 @@ async function handleUIChanges(): Promise<void> {
                             ? ({
                                 label: regex.scriptName,
                                 id: value,
-                                enabled: true, // Enable when added via dropdown
+                                enabled: true,
                               } as SortableListItemData)
                             : null;
                         })
@@ -744,8 +753,6 @@ async function handleUIChanges(): Promise<void> {
                   onDelete(itemId) {
                     const selectValues = getValues();
                     setValues(selectValues.filter((value) => value !== itemId));
-
-                    setList(getList().filter((item) => item.id !== itemId));
                     activeSession.regexIds = Object.fromEntries(
                       Object.entries(activeSession.regexIds).filter(([key]) => key !== itemId),
                     );
@@ -812,79 +819,49 @@ async function handleUIChanges(): Promise<void> {
 
                 const newContent = regexResultTextarea.value;
 
-                const regexMap: Record<string, Partial<RegexScriptData>> = {};
-                getOrderedRegex().forEach((regex) => {
-                  regexMap[regex.id] = { disabled: regex.disabled };
-                });
-                activeSession.regexIds = regexMap;
-                saveSession();
+                const finalOrder = getOrder();
+                const finalList = getList();
+                activeSession.regexIds = Object.fromEntries(
+                  finalList
+                    .sort((a, b) => finalOrder.indexOf(a.id) - finalOrder.indexOf(b.id)) // Sort by final order
+                    .map((item) => [item.id, { disabled: !item.enabled }]),
+                );
 
-                addRegexButton!.disabled = true;
+                editRegexButton!.disabled = true;
                 const regularAddButton = node.querySelector<HTMLButtonElement>('.add');
-                regularAddButton!.disabled = true;
+                if (regularAddButton) regularAddButton.disabled = true; // Keep Add button disabled too during this process
 
                 try {
-                  const originalUid = parseInt(node.dataset.id ?? '');
-                  const originalWorldName = node.dataset.worldName ?? '';
-                  const originalComment = node.dataset.comment;
-
-                  if (isNaN(originalUid) || !originalWorldName || !originalComment) {
-                    st_echo('error', 'Could not retrieve original entry details for adding with regex.');
-                    return;
-                  }
-                  const originalSuggestedEntry = activeSession.suggestedEntries[originalWorldName]?.find(
-                    (e) => e.uid === originalUid && e.comment === originalComment,
+                  // Retrieve the entry *again* in case something changed while popup was open, though unlikely
+                  const entryToUpdateIndex = activeSession.suggestedEntries[worldName]?.findIndex(
+                    (e) => e.uid === uid && e.comment === comment,
                   );
-                  if (!originalSuggestedEntry) {
-                    // Entry might have been removed/added elsewhere. If node exists, remove it.
+
+                  if (entryToUpdateIndex === undefined || entryToUpdateIndex === -1) {
+                    st_echo('error', 'Suggested entry disappeared while editing with regex.');
                     node.remove();
-                    st_echo('error', 'Original suggested entry not found in session after regex modification.');
                     saveSession();
                     return;
                   }
-
-                  // Get the selected target world from the dropdown within the entry node
-                  const worldSelect = node.querySelector<HTMLSelectElement>('.world-select');
-                  const selectedIndex = parseInt(worldSelect!.value);
-
-                  if (isNaN(selectedIndex) || selectedIndex < 0 || selectedIndex >= allWorldNames.length) {
-                    st_echo('warning', 'Please select a valid world to add the entry to.');
-                    return; // Don't proceed without a valid target world
+                  const entryToUpdate = activeSession.suggestedEntries[worldName][entryToUpdateIndex];
+                  entryToUpdate.content = newContent;
+                  const contentEl = node.querySelector<HTMLElement>('.content');
+                  if (contentEl) {
+                    contentEl.innerHTML = converter.makeHtml(newContent);
+                  } else {
+                    console.error('Could not find .content element in the suggestion node to update UI.');
+                    st_echo('warning', 'UI update failed for regex edit, but session data was saved.');
                   }
-                  const selectedWorldName = allWorldNames[selectedIndex];
-
-                  // Create a copy of the entry to modify and add
-                  const entryToAdd = structuredClone(originalSuggestedEntry);
-                  entryToAdd.content = newContent; // Apply the regex-modified content
-
-                  // Remove the original entry from the suggestions UI and session *before* adding
-                  node.remove(); // Remove the element from the display
-                  if (activeSession.suggestedEntries[originalWorldName]) {
-                    activeSession.suggestedEntries[originalWorldName] = activeSession.suggestedEntries[
-                      originalWorldName
-                    ].filter((e) => !(e.uid === originalUid && e.comment === originalComment));
-                  }
-
-                  lastAddedWorldName = selectedWorldName;
-                  const status = await addEntry(entryToAdd, selectedWorldName); // This eventually saves session
 
                   saveSession();
-
-                  st_echo(
-                    'success',
-                    status === 'added'
-                      ? 'Entry added with regex modification'
-                      : 'Entry updated with regex modification',
-                  );
                 } catch (error: any) {
-                  console.error('Error adding entry with regex:', error);
+                  console.error('Error applying regex edit to suggested entry:', error);
                   st_echo(
                     'error',
-                    `Failed to add entry with regex: ${error instanceof Error ? error.message : String(error)}`,
+                    `Failed to apply regex edit: ${error instanceof Error ? error.message : String(error)}`,
                   );
-                  saveSession();
                 } finally {
-                  addRegexButton!.disabled = false;
+                  editRegexButton!.disabled = false;
                   regularAddButton!.disabled = false;
                 }
               });
