@@ -365,15 +365,6 @@ async function handleUIChanges(): Promise<void> {
         settingsManager.saveSettings();
       });
 
-      const showEditWithRegexButton = settingsContainer.querySelector<HTMLInputElement>(
-        '.showEditWithRegexButton input[type="checkbox"]',
-      );
-      showEditWithRegexButton!.checked = settings.showEditWithRegexButton;
-      showEditWithRegexButton!.addEventListener('change', () => {
-        settings.showEditWithRegexButton = showEditWithRegexButton!.checked;
-        settingsManager.saveSettings();
-      });
-
       let entriesGroupByWorldName: Record<string, WIEntry[]> = {};
       if (avatar) {
         entriesGroupByWorldName = await getActiveWorldInfo(['all'], this_chid);
@@ -658,11 +649,8 @@ async function handleUIChanges(): Promise<void> {
               blacklistButton!.addEventListener('click', (e) => handleRemove(e, true));
               addButton!.addEventListener('click', handleAdd);
 
-              const editRegexButton = node.querySelector<HTMLButtonElement>('.edit-regex');
-              if (!settings.showEditWithRegexButton) {
-                editRegexButton!.style.display = 'none';
-              }
-              editRegexButton!.addEventListener('click', async () => {
+              const editButtonButton = node.querySelector<HTMLButtonElement>('.edit');
+              editButtonButton!.addEventListener('click', async () => {
                 const uid = parseInt(node.dataset.id ?? '');
                 const worldName = node.dataset.worldName ?? '';
                 const comment = node.dataset.comment;
@@ -685,149 +673,162 @@ async function handleUIChanges(): Promise<void> {
 
                 const allRegexes = context.extensionSettings.regex ?? [];
 
-                const initialSortableList: SortableListItemData[] = Object.entries(activeSession.regexIds)
-                  .map(([id, data]) => {
-                    const regex = allRegexes.find((r) => r.id === id);
-                    return regex ? { label: regex.scriptName, id: regex.id, enabled: !data.disabled } : null;
-                  })
-                  .filter((item): item is SortableListItemData => item !== null);
-
-                const initialDropdownValues = initialSortableList.map((item) => item.id);
-
-                const regexDiv = document.createElement('div');
-                regexDiv.classList.add('regex-popup');
+                const mainDiv = document.createElement('div');
+                mainDiv.classList.add('edit-popup');
                 const regexTitle = document.createElement('h3');
-                regexTitle.textContent = 'Edit Suggestion with Regex';
-                regexDiv.appendChild(regexTitle);
+                regexTitle.textContent = 'Edit Suggestion';
+                mainDiv.appendChild(regexTitle);
 
-                const selectContainer = document.createElement('div');
-                regexDiv.appendChild(selectContainer);
-                const { getValues, setValues } = buildFancyDropdown(selectContainer, {
-                  enableSearch: true,
-                  multiple: true,
-                  initialList: allRegexes.map((r) => ({ label: r.scriptName, value: r.id })),
-                  initialValues: initialDropdownValues,
-                  onSelectChange(previousValues, newValues) {
-                    const addedValues = newValues.filter((value) => !previousValues.includes(value));
-                    const removedValues = previousValues.filter((value) => !newValues.includes(value));
+                let resultTextarea: HTMLTextAreaElement | null = null;
+                let getRegexList: (() => SortableListItemData[]) | null = null;
+                let getRegexOrder: (() => string[]) | null = null;
+                if (allRegexes.length > 0) {
+                  const regexContainerTitle = document.createElement('h4');
+                  regexContainerTitle.textContent = 'Apply Regex Scripts';
+                  mainDiv.appendChild(regexContainerTitle);
 
-                    if (removedValues.length > 0) {
-                      const sortedList = getList();
-                      setList(sortedList.filter((item) => !removedValues.includes(item.id)));
+                  const initialSortableList: SortableListItemData[] = Object.entries(activeSession.regexIds)
+                    .map(([id, data]) => {
+                      const regex = allRegexes.find((r) => r.id === id);
+                      return regex ? { label: regex.scriptName, id: regex.id, enabled: !data.disabled } : null;
+                    })
+                    .filter((item): item is SortableListItemData => item !== null);
+
+                  const initialDropdownValues = initialSortableList.map((item) => item.id);
+
+                  const selectContainer = document.createElement('div');
+                  mainDiv.appendChild(selectContainer);
+                  const { getValues, setValues } = buildFancyDropdown(selectContainer, {
+                    enableSearch: true,
+                    multiple: true,
+                    initialList: allRegexes.map((r) => ({ label: r.scriptName, value: r.id })),
+                    initialValues: initialDropdownValues,
+                    onSelectChange(previousValues, newValues) {
+                      const addedValues = newValues.filter((value) => !previousValues.includes(value));
+                      const removedValues = previousValues.filter((value) => !newValues.includes(value));
+
+                      if (removedValues.length > 0) {
+                        const sortedList = getList();
+                        setList(sortedList.filter((item) => !removedValues.includes(item.id)));
+                        activeSession.regexIds = Object.fromEntries(
+                          Object.entries(activeSession.regexIds).filter(([key]) => !removedValues.includes(key)),
+                        );
+                        saveSession();
+                      }
+
+                      if (addedValues.length > 0) {
+                        const sortedList = getList();
+                        const newItems = addedValues
+                          .map((value) => {
+                            const regex = allRegexes.find((r) => r.id === value);
+                            return regex
+                              ? ({
+                                  label: regex.scriptName,
+                                  id: value,
+                                  enabled: true,
+                                } as SortableListItemData)
+                              : null;
+                          })
+                          .filter((item): item is SortableListItemData => item !== null);
+                        setList([...sortedList, ...newItems]);
+                        activeSession.regexIds = {
+                          ...activeSession.regexIds,
+                          ...Object.fromEntries(newItems.map((item) => [item.id, { disabled: false }])),
+                        };
+                        saveSession();
+                      }
+                    },
+                  });
+
+                  const sortableListContainer = document.createElement('div');
+                  mainDiv.appendChild(sortableListContainer);
+                  const { getList, getOrder, setList } = buildSortableList(sortableListContainer, {
+                    initialList: initialSortableList,
+                    showDeleteButton: true,
+                    showToggleButton: true,
+                    onDelete(itemId) {
+                      const selectValues = getValues();
+                      setValues(selectValues.filter((value) => value !== itemId));
                       activeSession.regexIds = Object.fromEntries(
-                        Object.entries(activeSession.regexIds).filter(([key]) => !removedValues.includes(key)),
+                        Object.entries(activeSession.regexIds).filter(([key]) => key !== itemId),
                       );
                       saveSession();
-                    }
-
-                    if (addedValues.length > 0) {
-                      const sortedList = getList();
-                      const newItems = addedValues
-                        .map((value) => {
-                          const regex = allRegexes.find((r) => r.id === value);
-                          return regex
-                            ? ({
-                                label: regex.scriptName,
-                                id: value,
-                                enabled: true,
-                              } as SortableListItemData)
-                            : null;
-                        })
-                        .filter((item): item is SortableListItemData => item !== null);
-                      setList([...sortedList, ...newItems]);
+                      return true;
+                    },
+                    onOrderChange(newItemOrderIds) {
+                      const newOrder = newItemOrderIds
+                        .map((id) => getList().find((item) => item.id === id))
+                        .filter((item) => item !== undefined);
+                      activeSession.regexIds = Object.fromEntries(
+                        newOrder.map((item) => [item.id, { disabled: !item.enabled }]),
+                      );
+                      saveSession();
+                    },
+                    onToggle(itemId, newState) {
                       activeSession.regexIds = {
                         ...activeSession.regexIds,
-                        ...Object.fromEntries(newItems.map((item) => [item.id, { disabled: false }])),
+                        [itemId]: { disabled: !newState },
                       };
                       saveSession();
+                    },
+                  });
+                  getRegexList = getList;
+                  getRegexOrder = getOrder;
+
+                  const getOrderedRegex = () => {
+                    const order: string[] = getOrder();
+                    const listItems = getList();
+                    const sortedEnabledValues = listItems
+                      .filter((item) => item.enabled)
+                      .sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id))
+                      .map((item) => item.id);
+                    return sortedEnabledValues
+                      .map((id) => allRegexes.find((r) => r.id === id))
+                      .filter((r) => r !== undefined);
+                  };
+
+                  const getRegexResult = () => {
+                    let result = entry.content;
+                    for (const regex of getOrderedRegex()) {
+                      result = st_runRegexScript(regex, result);
                     }
-                  },
-                });
+                    return result;
+                  };
 
-                const sortableListContainer = document.createElement('div');
-                regexDiv.appendChild(sortableListContainer);
-                const { getList, getOrder, setList } = buildSortableList(sortableListContainer, {
-                  initialList: initialSortableList,
-                  showDeleteButton: true,
-                  showToggleButton: true,
-                  onDelete(itemId) {
-                    const selectValues = getValues();
-                    setValues(selectValues.filter((value) => value !== itemId));
-                    activeSession.regexIds = Object.fromEntries(
-                      Object.entries(activeSession.regexIds).filter(([key]) => key !== itemId),
-                    );
-                    saveSession();
-                    return true;
-                  },
-                  onOrderChange(newItemOrderIds) {
-                    const newOrder = newItemOrderIds
-                      .map((id) => getList().find((item) => item.id === id))
-                      .filter((item) => item !== undefined);
-                    activeSession.regexIds = Object.fromEntries(
-                      newOrder.map((item) => [item.id, { disabled: !item.enabled }]),
-                    );
-                    saveSession();
-                  },
-                  onToggle(itemId, newState) {
-                    activeSession.regexIds = {
-                      ...activeSession.regexIds,
-                      [itemId]: { disabled: !newState },
-                    };
-                    saveSession();
-                  },
-                });
+                  const simulateButton = document.createElement('button');
+                  simulateButton.textContent = 'Simulate';
+                  simulateButton.classList.add('menu_button');
+                  mainDiv.appendChild(simulateButton);
 
-                const getOrderedRegex = () => {
-                  const order: string[] = getOrder();
-                  const listItems = getList();
-                  const sortedEnabledValues = listItems
-                    .filter((item) => item.enabled)
-                    .sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id))
-                    .map((item) => item.id);
-                  return sortedEnabledValues
-                    .map((id) => allRegexes.find((r) => r.id === id))
-                    .filter((r) => r !== undefined);
-                };
+                  simulateButton.addEventListener('click', async () => {
+                    const regexResult = getRegexResult();
+                    resultTextarea!.value = regexResult;
+                  });
+                }
 
-                const getRegexResult = () => {
-                  let result = entry.content;
-                  for (const regex of getOrderedRegex()) {
-                    result = st_runRegexScript(regex, result);
-                  }
-                  return result;
-                };
+                resultTextarea = document.createElement('textarea');
+                resultTextarea.classList.add('text_pole', 'textarea_compact');
+                resultTextarea.setAttribute('rows', '5');
+                resultTextarea.setAttribute('placeholder', 'Result');
+                resultTextarea.value = entry.content;
+                mainDiv.appendChild(resultTextarea);
 
-                const simulateButton = document.createElement('button');
-                simulateButton.textContent = 'Simulate';
-                simulateButton.classList.add('menu_button');
-                regexDiv.appendChild(simulateButton);
-
-                let regexResultTextarea: HTMLTextAreaElement | null = null;
-                simulateButton.addEventListener('click', async () => {
-                  const regexResult = getRegexResult();
-                  regexResultTextarea!.value = regexResult;
-                });
-                regexResultTextarea = document.createElement('textarea');
-                regexResultTextarea.classList.add('text_pole', 'textarea_compact');
-                regexResultTextarea.setAttribute('rows', '5');
-                regexResultTextarea.setAttribute('placeholder', 'Result');
-                regexResultTextarea.value = entry.content;
-                regexDiv.appendChild(regexResultTextarea);
-
-                const confirmed = await globalContext.callGenericPopup(regexDiv, POPUP_TYPE.CONFIRM);
+                const confirmed = await globalContext.callGenericPopup(mainDiv, POPUP_TYPE.CONFIRM);
                 if (!confirmed) return;
 
-                const newContent = regexResultTextarea.value;
+                const newContent = resultTextarea.value;
 
-                const finalOrder = getOrder();
-                const finalList = getList();
-                activeSession.regexIds = Object.fromEntries(
-                  finalList
-                    .sort((a, b) => finalOrder.indexOf(a.id) - finalOrder.indexOf(b.id)) // Sort by final order
-                    .map((item) => [item.id, { disabled: !item.enabled }]),
-                );
+                if (getRegexList && getRegexOrder) {
+                  const finalOrder = getRegexOrder();
+                  const finalList = getRegexList();
+                  activeSession.regexIds = Object.fromEntries(
+                    finalList
+                      .sort((a, b) => finalOrder.indexOf(a.id) - finalOrder.indexOf(b.id)) // Sort by final order
+                      .map((item) => [item.id, { disabled: !item.enabled }]),
+                  );
+                }
 
-                editRegexButton!.disabled = true;
+                editButtonButton!.disabled = true;
                 const regularAddButton = node.querySelector<HTMLButtonElement>('.add');
                 if (regularAddButton) regularAddButton.disabled = true; // Keep Add button disabled too during this process
 
@@ -838,7 +839,7 @@ async function handleUIChanges(): Promise<void> {
                   );
 
                   if (entryToUpdateIndex === undefined || entryToUpdateIndex === -1) {
-                    st_echo('error', 'Suggested entry disappeared while editing with regex.');
+                    st_echo('error', 'Suggested entry disappeared while editing.');
                     node.remove();
                     saveSession();
                     return;
@@ -850,18 +851,15 @@ async function handleUIChanges(): Promise<void> {
                     contentEl.innerHTML = converter.makeHtml(newContent);
                   } else {
                     console.error('Could not find .content element in the suggestion node to update UI.');
-                    st_echo('warning', 'UI update failed for regex edit, but session data was saved.');
+                    st_echo('warning', 'UI update failed for edit, but session data was saved.');
                   }
 
                   saveSession();
                 } catch (error: any) {
-                  console.error('Error applying regex edit to suggested entry:', error);
-                  st_echo(
-                    'error',
-                    `Failed to apply regex edit: ${error instanceof Error ? error.message : String(error)}`,
-                  );
+                  console.error('Error applying edit to suggested entry:', error);
+                  st_echo('error', `Failed to apply edit: ${error instanceof Error ? error.message : String(error)}`);
                 } finally {
-                  editRegexButton!.disabled = false;
+                  editButtonButton!.disabled = false;
                   regularAddButton!.disabled = false;
                 }
               });

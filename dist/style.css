@@ -10,11 +10,11 @@
   overflow-y: auto;
 }
 
-.popup-content:has(.regex-popup) {
+.popup-content:has(.edit-popup) {
   overflow: visible;
 }
 
-.popup-body:has(.regex-popup) {
+.popup-body:has(.edit-popup) {
   overflow: visible;
 }
 
