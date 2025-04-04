@@ -633,7 +633,27 @@ async function handleUIChanges(): Promise<void> {
 
       let entriesGroupByWorldName: Record<string, WIEntry[]> = {};
       if (avatar) {
-        entriesGroupByWorldName = await getActiveWorldInfo(['all'], this_chid);
+        if (selected_group) {
+          const groupWorldInfo = await getActiveWorldInfo(['chat', 'persona', 'global']);
+          if (groupWorldInfo) {
+            entriesGroupByWorldName = groupWorldInfo;
+          }
+
+          const groupIndex = groups.findIndex((g: any) => g.id === selected_group);
+          const group: { generation_mode: number; members: string[] } = groups[groupIndex];
+          for (const member of group.members) {
+            const index: number = context.characters.findIndex((c: any) => c.avatar === member);
+            const worldInfo = await getActiveWorldInfo(['character'], index);
+            if (worldInfo) {
+              entriesGroupByWorldName = {
+                ...entriesGroupByWorldName,
+                ...worldInfo,
+              };
+            }
+          }
+        } else {
+          entriesGroupByWorldName = await getActiveWorldInfo(['all'], this_chid);
+        }
       } else {
         for (const worldName of world_names) {
           const worldInfo = await globalContext.loadWorldInfo(worldName);
