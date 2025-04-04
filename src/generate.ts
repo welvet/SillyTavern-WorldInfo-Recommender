@@ -1,8 +1,9 @@
-import { buildPrompt, BuildPromptOptions } from 'sillytavern-utils-lib';
-import { ChatCompletionMessage, ExtractedData } from 'sillytavern-utils-lib/types';
+import { buildPrompt, BuildPromptOptions, ExtensionSettingsManager, Message } from 'sillytavern-utils-lib';
+import { ExtractedData } from 'sillytavern-utils-lib/types';
 import { parseXMLOwn } from './xml.js';
 import { WIEntry } from 'sillytavern-utils-lib/types/world-info';
 import { st_createWorldInfoEntry } from 'sillytavern-utils-lib/config';
+import { ExtensionSettings, MessageRole } from './settings.js';
 import { RegexScriptData } from 'sillytavern-utils-lib/types/regex';
 
 // @ts-ignore
@@ -17,36 +18,20 @@ export interface Session {
   regexIds: Record<string, Partial<RegexScriptData>>;
 }
 
-export interface ContextToSend {
-  stDescription: boolean;
-  messages: {
-    type: 'none' | 'all' | 'first' | 'last' | 'range';
-    first?: number;
-    last?: number;
-    range?: {
-      start: number;
-      end: number;
-    };
-  };
-  charCard: boolean;
-  authorNote: boolean;
-  worldInfo: boolean;
-  suggestedEntries: boolean;
-}
+// @ts-ignore
+const dumbSettings = new ExtensionSettingsManager<ExtensionSettings>('dumb', {}).getSettings();
 
 export interface RunWorldInfoRecommendationParams {
   profileId: string;
   userPrompt: string;
   buildPromptOptions: BuildPromptOptions;
-  contextToSend: ContextToSend;
   session: Session;
   entriesGroupByWorldName: Record<string, WIEntry[]>;
-  promptSettings: {
-    stWorldInfoPrompt: string;
-    lorebookDefinitionPrompt: string;
-    responseRulesPrompt: string;
-    lorebookRulesPrompt: string;
-  };
+  promptSettings: typeof dumbSettings.prompts;
+  mainContextList: {
+    promptName: string;
+    role: MessageRole;
+  }[];
   maxResponseToken: number;
 }
 
@@ -54,10 +39,10 @@ export async function runWorldInfoRecommendation({
   profileId,
   userPrompt,
   buildPromptOptions,
-  contextToSend,
   session,
   entriesGroupByWorldName,
   promptSettings,
+  mainContextList,
   maxResponseToken,
 }: RunWorldInfoRecommendationParams): Promise<Record<string, WIEntry[]>> {
   if (!profileId) {
@@ -69,85 +54,71 @@ export async function runWorldInfoRecommendation({
     throw new Error(`Connection profile with ID "${profileId}" not found.`);
   }
 
-  const processedPrompt = globalContext.substituteParams(userPrompt.trim());
-  if (!processedPrompt) {
-    throw new Error('Prompt is empty after macro substitution.');
-  }
-
-  const messages: ChatCompletionMessage[] = [];
   const selectedApi = profile.api ? globalContext.CONNECT_API_MAP[profile.api].selected : undefined;
   if (!selectedApi) {
     throw new Error(`Could not determine API for profile "${profile.name}".`);
   }
 
-  messages.push(...(await buildPrompt(selectedApi, buildPromptOptions)));
+  const templateData: Record<string, any> = {};
+  templateData['user'] = '{{user}}'; // ST going to replace this with the actual user name
+  templateData['char'] = '{{char}}'; // ST going to replace this with the actual character name
+  templateData['persona'] = '{{persona}}'; // ST going to replace this with the actual persona description
 
-  if (contextToSend.stDescription) {
-    messages.push({
-      role: 'system',
-      content: promptSettings.stWorldInfoPrompt,
-    });
+  templateData['blackListedEntries'] = session.blackListedEntries;
+  templateData['userInstructions'] = Handlebars.compile(userPrompt.trim(), { noEscape: true })(templateData);
+
+  {
+    const lorebooks: Record<string, WIEntry[]> = {};
+    Object.entries(entriesGroupByWorldName)
+      .filter(
+        ([worldName, entries]) =>
+          entries.length > 0 && session.selectedWorldNames.includes(worldName) && entries.some((e) => !e.disable),
+      )
+      .forEach(([worldName, entries]) => {
+        lorebooks[worldName] = entries.filter((e) => !e.disable);
+      });
+
+    templateData['currentLorebooks'] = lorebooks;
   }
-  if (contextToSend.worldInfo) {
-    if (session.selectedWorldNames.length > 0) {
-      const template = Handlebars.compile(promptSettings.lorebookDefinitionPrompt, { noEscape: true });
-      const lorebooks: Record<string, WIEntry[]> = {};
-      Object.entries(entriesGroupByWorldName)
-        .filter(
-          ([worldName, entries]) =>
-            entries.length > 0 && session.selectedWorldNames.includes(worldName) && entries.some((e) => !e.disable),
-        )
-        .forEach(([worldName, entries]) => {
-          lorebooks[worldName] = entries.filter((e) => !e.disable);
-        });
 
-      const worldInfoPrompt = template({ lorebooks });
+  {
+    const lorebooks: Record<string, WIEntry[]> = {};
+    Object.entries(session.suggestedEntries)
+      .filter(([_, entries]) => entries.length > 0)
+      .forEach(([worldName, entries]) => {
+        lorebooks[worldName] = entries;
+      });
 
-      if (worldInfoPrompt) {
-        messages.push({
-          role: 'assistant',
-          content: `=== CURRENT LOREBOOKS ===\n${worldInfoPrompt}`,
-        });
+    templateData['suggestedLorebooks'] = lorebooks;
+  }
+
+  const messages: Message[] = [];
+  {
+    for (const mainContext of mainContextList) {
+      // Chat history is exception, since it is not a template
+      if (mainContext.promptName === 'chatHistory') {
+        const chatHistory = (await buildPrompt(selectedApi, buildPromptOptions)).map((message) => ({
+          role: message.role,
+          content: message.content,
+        }));
+        messages.push(...chatHistory);
+        continue;
+      }
+
+      const prompt = promptSettings[mainContext.promptName];
+      if (!prompt) {
+        continue;
+      }
+      const message: Message = {
+        role: mainContext.role,
+        content: Handlebars.compile(prompt.content, { noEscape: true })(templateData),
+      };
+      message.content = globalContext.substituteParams(message.content);
+      if (message.content) {
+        messages.push(message);
       }
     }
   }
-
-  if (session.blackListedEntries.length > 0) {
-    let blackListPrompt = '# Blacklisted Entries:\n';
-    session.blackListedEntries.forEach((entry) => {
-      blackListPrompt += `- ${entry}\n`;
-    });
-    messages.push({
-      role: 'system',
-      content: blackListPrompt,
-    });
-  }
-
-  if (contextToSend.suggestedEntries && Object.keys(session.suggestedEntries).length > 0) {
-    const anySuggested = Object.values(session.suggestedEntries).some((entries) => entries.length > 0);
-    if (anySuggested) {
-      const template = Handlebars.compile(promptSettings.lorebookDefinitionPrompt, { noEscape: true });
-      const lorebooks: Record<string, WIEntry[]> = {};
-      Object.entries(session.suggestedEntries)
-        .filter(([_, entries]) => entries.length > 0)
-        .forEach(([worldName, entries]) => {
-          lorebooks[worldName] = entries;
-        });
-
-      const suggestedPromptrompt = template({ lorebooks });
-
-      messages.push({
-        role: 'system',
-        content: `=== Already suggested entries ===\n${suggestedPromptrompt}`,
-      });
-    }
-  }
-
-  const finalUserPrompt = `${promptSettings.responseRulesPrompt}\n\n${promptSettings.lorebookRulesPrompt}\n\nYour task:\n${processedPrompt}`;
-  messages.push({
-    role: 'user',
-    content: finalUserPrompt,
-  });
 
   // console.log("Sending messages:", messages);
 

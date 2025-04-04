@@ -4,7 +4,6 @@ import { WIEntry } from 'sillytavern-utils-lib/types/world-info';
 
 // @ts-ignore
 import {
-  ContextToSend,
   globalContext,
   prepareEntryModification,
   provideConnectionProfiles,
@@ -12,7 +11,7 @@ import {
   RunWorldInfoRecommendationParams,
   Session,
 } from './generate.js';
-import { settingsManager } from './settings.js';
+import { ContextToSend, settingsManager } from './settings.js';
 
 let popupIcon: HTMLDivElement | undefined;
 export function setPopupIcon(icon: HTMLDivElement) {
@@ -125,6 +124,8 @@ export function initializeCommands() {
                           <br>
                           - <b>max-response</b>: Override response token limit (number). Defaults to extension settings.
                           <br>
+                          - <b>main-context-template</b>: Override main context template preset (string). Defaults to extension settings.
+                          <br>
                           - <b>silent</b>: Suppress success/error messages (boolean). Defaults to false.
                       </div>
                       <div>
@@ -192,6 +193,12 @@ export function initializeCommands() {
           name: 'max-response',
           description: 'Override response token limit.',
           typeList: [globalContext.ARGUMENT_TYPE.NUMBER],
+          isRequired: false,
+        }),
+        globalContext.SlashCommandNamedArgument.fromProps({
+          name: 'main-context-template',
+          description: 'Override main context template preset.',
+          typeList: [globalContext.ARGUMENT_TYPE.STRING],
           isRequired: false,
         }),
         globalContext.SlashCommandNamedArgument.fromProps({
@@ -391,21 +398,34 @@ export function initializeCommands() {
 
           const parsedMaxResponse = namedArgs['max-response'] ? parseInt(namedArgs['max-response']) : undefined;
 
+          const promptSettings = structuredClone(settings.prompts);
+          if (!contextToSend.stDescription) {
+            // @ts-ignore
+            delete promptSettings.stDescription;
+          }
+          if (!contextToSend.worldInfo || targetLorebookNames.length === 0) {
+            // @ts-ignore
+            delete promptSettings.currentLorebooks;
+          }
+          // @ts-ignore - no need suggesting entries
+          delete promptSettings.suggestedLorebooks;
+
           // Prepare Params for the core function
           const params: RunWorldInfoRecommendationParams = {
             profileId: profileId,
             userPrompt: userPrompt,
             buildPromptOptions: buildPromptOptions,
-            contextToSend: contextToSend,
             session: session,
             entriesGroupByWorldName: allWorldInfo, // Pass the current state
-            promptSettings: {
-              // Get from settings
-              stWorldInfoPrompt: settings.stWorldInfoPrompt,
-              lorebookDefinitionPrompt: settings.lorebookDefinitionPrompt,
-              responseRulesPrompt: settings.responseRulesPrompt,
-              lorebookRulesPrompt: settings.lorebookRulesPrompt,
-            },
+            promptSettings,
+            mainContextList: settings.mainContextTemplatePresets[
+              namedArgs['main-context-template'] ?? settings.mainContextTemplatePreset
+            ].prompts
+              .filter((p) => p.enabled)
+              .map((p) => ({
+                promptName: p.promptName,
+                role: p.role,
+              })),
             maxResponseToken: parsedMaxResponse ?? settings.maxResponseToken,
           };
 

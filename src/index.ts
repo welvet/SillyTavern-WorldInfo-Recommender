@@ -17,9 +17,6 @@ import {
   world_names,
 } from 'sillytavern-utils-lib/config';
 import { POPUP_TYPE } from 'sillytavern-utils-lib/types/popup';
-import { RegexScriptData } from 'sillytavern-utils-lib/types/regex';
-import { DEFAULT_LOREBOOK_DEFINITION, DEFAULT_LOREBOOK_RULES, DEFAULT_ST_DESCRIPTION } from './constants.js';
-import { DEFAULT_XML_DESCRIPTION } from './xml.js';
 import { WIEntry } from 'sillytavern-utils-lib/types/world-info';
 import showdown from 'showdown';
 
@@ -28,7 +25,18 @@ import { initializeCommands, setPopupIcon } from './commands.js';
 
 // @ts-ignore
 import { Handlebars } from '../../../../../lib.js';
-import { extensionName, settingsManager } from './settings.js';
+import {
+  convertToVariableName,
+  DEFAULT_PROMPT_CONTENTS,
+  DEFAULT_SETTINGS,
+  extensionName,
+  initializeSettings,
+  MessageRole,
+  PromptSetting,
+  settingsManager,
+  SYSTEM_PROMPT_KEYS,
+  SystemPromptKey,
+} from './settings.js';
 if (!Handlebars.helpers['join']) {
   Handlebars.registerHelper('join', function (array: any, separator: any) {
     return array.join(separator);
@@ -52,106 +60,364 @@ async function handleUIChanges(): Promise<void> {
 
   const settings = settingsManager.getSettings();
 
-  const stWorldInfoPromptContainer = settingsContainer.querySelector<HTMLElement>('.stWorldInfoPrompt');
-  const stWorldInfoPromptContainerTextarea = stWorldInfoPromptContainer!.querySelector<HTMLTextAreaElement>('textarea');
+  let setMainContextList: (list: SortableListItemData[]) => void;
+  let getMainContextList: () => SortableListItemData[];
+  // --- Setup Main Context Template ---
+  {
+    const promptSelect = settingsContainer.querySelector(
+      '#worldInfoRecommender_mainContextTemplatePreset',
+    ) as HTMLSelectElement;
+    const promptList = settingsContainer.querySelector('#worldInfoRecommender_mainContextList') as HTMLTextAreaElement;
+    const restoreMainContextTemplateButton = settingsContainer.querySelector(
+      '#worldInfoRecommender_restoreMainContextTemplateDefault',
+    ) as HTMLButtonElement;
 
-  const lorebookDefinitionPromptContainer = settingsContainer.querySelector<HTMLElement>('.lorebookDefinitionPrompt');
-  const lorebookDefinitionPromptContainerTextarea =
-    lorebookDefinitionPromptContainer!.querySelector<HTMLTextAreaElement>('textarea');
+    buildPresetSelect('#worldInfoRecommender_mainContextTemplatePreset', {
+      initialList: Object.keys(settings.mainContextTemplatePresets),
+      initialValue: settings.mainContextTemplatePreset,
+      readOnlyValues: ['default'],
+      onSelectChange(_, newValue) {
+        const newPresetValue = newValue ?? 'default';
+        setList(
+          settings.mainContextTemplatePresets[newPresetValue].prompts.map((prompt) => {
+            let label = prompt.promptName;
+            if (settings.prompts[prompt.promptName]) {
+              label = `${settings.prompts[prompt.promptName].label} (${prompt.promptName})`;
+            }
+            return {
+              enabled: prompt.enabled,
+              id: prompt.promptName,
+              label,
+              selectOptions: [
+                { value: 'user', label: 'User' },
+                { value: 'assistant', label: 'Assistant' },
+                { value: 'system', label: 'System' },
+              ],
+              selectValue: prompt.role,
+            };
+          }),
+        );
 
-  const lorebookRulesPromptContainer = settingsContainer.querySelector<HTMLElement>('.lorebookRulesPrompt');
-  const lorebookRulesPromptContainerTextarea =
-    lorebookRulesPromptContainer!.querySelector<HTMLTextAreaElement>('textarea');
+        settings.mainContextTemplatePreset = newPresetValue;
+        settingsManager.saveSettings();
+      },
+      create: {
+        onAfterCreate(value) {
+          let currentPreset = settings.mainContextTemplatePresets[settings.mainContextTemplatePreset];
+          if (!currentPreset) {
+            currentPreset = settings.mainContextTemplatePresets['default'];
+          }
+          settings.mainContextTemplatePresets[value] = structuredClone(currentPreset);
+        },
+      },
+      rename: {
+        onAfterRename(previousValue, newValue) {
+          settings.mainContextTemplatePresets[newValue] = settings.mainContextTemplatePresets[previousValue];
+          delete settings.mainContextTemplatePresets[previousValue];
+        },
+      },
+      delete: {
+        onAfterDelete(value) {
+          delete settings.mainContextTemplatePresets[value];
+        },
+      },
+    });
 
-  const responseRulesPromptContainer = settingsContainer.querySelector<HTMLElement>('.responseRulesPrompt');
-  const responseRulesPromptContainerTextarea =
-    responseRulesPromptContainer!.querySelector<HTMLTextAreaElement>('textarea');
+    const initialPromptList: SortableListItemData[] = settings.mainContextTemplatePresets[
+      settings.mainContextTemplatePreset
+    ].prompts.map((prompt) => {
+      let label = prompt.promptName;
+      if (settings.prompts[prompt.promptName]) {
+        label = `${settings.prompts[prompt.promptName].label} (${prompt.promptName})`;
+      }
+      return {
+        enabled: prompt.enabled,
+        id: prompt.promptName,
+        label,
+        selectOptions: [
+          { value: 'user', label: 'User' },
+          { value: 'assistant', label: 'Assistant' },
+          { value: 'system', label: 'System' },
+        ],
+        selectValue: prompt.role,
+      };
+    });
+    const { setList, getList } = buildSortableList(promptList, {
+      initialList: initialPromptList,
+      showSelectInput: true,
+      showToggleButton: true,
+      onSelectChange(itemId, newValue) {
+        const item = settings.mainContextTemplatePresets[settings.mainContextTemplatePreset].prompts.find(
+          (prompt) => prompt.promptName === itemId,
+        );
+        if (item) {
+          item.role = newValue as MessageRole;
+          settingsManager.saveSettings();
+        }
+      },
+      onToggle(itemId, newState) {
+        const item = settings.mainContextTemplatePresets[settings.mainContextTemplatePreset].prompts.find(
+          (prompt) => prompt.promptName === itemId,
+        );
+        if (item) {
+          item.enabled = newState;
+          settingsManager.saveSettings();
+        }
+      },
+      onOrderChange(newItemOrderIds) {
+        const newOrder = newItemOrderIds
+          .map((id) => {
+            const item = settings.mainContextTemplatePresets[settings.mainContextTemplatePreset].prompts.find(
+              (prompt) => prompt.promptName === id,
+            );
+            return item;
+          })
+          .filter((item) => item !== undefined);
+        settings.mainContextTemplatePresets[settings.mainContextTemplatePreset].prompts = newOrder;
+        settingsManager.saveSettings();
+      },
+    });
+    setMainContextList = setList;
+    getMainContextList = getList;
 
-  stWorldInfoPromptContainerTextarea!.value = settings.stWorldInfoPrompt;
-  lorebookDefinitionPromptContainerTextarea!.value = settings.lorebookDefinitionPrompt;
-  lorebookRulesPromptContainerTextarea!.value = settings.lorebookRulesPrompt;
-  responseRulesPromptContainerTextarea!.value = settings.responseRulesPrompt;
-
-  // Helper function to attach restore default listeners
-  const attachRestoreListener = (
-    container: HTMLElement | null,
-    textarea: HTMLTextAreaElement | null | undefined,
-    confirmMessage: string,
-    defaultValue: string,
-  ) => {
-    container!.querySelector('.restore_default')!.addEventListener('click', async () => {
-      const confirm = await globalContext.Popup.show.confirm('World Info Recommender', confirmMessage);
+    restoreMainContextTemplateButton.addEventListener('click', async () => {
+      const confirm = await globalContext.Popup.show.confirm(
+        'Restore default',
+        'Are you sure you want to restore the default prompt?',
+      );
       if (!confirm) {
         return;
       }
-      textarea!.value = defaultValue;
-      textarea!.dispatchEvent(new Event('change', { bubbles: true }));
+
+      settings.mainContextTemplatePresets['default'] = {
+        prompts: DEFAULT_SETTINGS.mainContextTemplatePresets['default'].prompts,
+      };
+      if (promptSelect.value !== 'default') {
+        promptSelect.value = 'default';
+        promptSelect.dispatchEvent(new Event('change'));
+      } else {
+        setList(
+          settings.mainContextTemplatePresets['default'].prompts.map((prompt) => {
+            let label = prompt.promptName;
+            if (settings.prompts[prompt.promptName]) {
+              label = `${settings.prompts[prompt.promptName].label} (${prompt.promptName})`;
+            }
+            return {
+              enabled: prompt.enabled,
+              id: prompt.promptName,
+              label,
+              selectOptions: [
+                { value: 'user', label: 'User' },
+                { value: 'assistant', label: 'Assistant' },
+                { value: 'system', label: 'System' },
+              ],
+              selectValue: prompt.role,
+            };
+          }),
+        );
+        settingsManager.saveSettings();
+      }
     });
-  };
+  }
 
-  attachRestoreListener(
-    stWorldInfoPromptContainer,
-    stWorldInfoPromptContainerTextarea,
-    'Are you sure you want to restore the default ST/World Info description?',
-    DEFAULT_ST_DESCRIPTION,
-  );
-  attachRestoreListener(
-    lorebookDefinitionPromptContainer,
-    lorebookDefinitionPromptContainerTextarea,
-    'Are you sure you want to restore the default lorebook definition?',
-    DEFAULT_LOREBOOK_DEFINITION,
-  );
-  attachRestoreListener(
-    lorebookRulesPromptContainer,
-    lorebookRulesPromptContainerTextarea,
-    'Are you sure you want to restore the default lorebook rules?',
-    DEFAULT_LOREBOOK_RULES,
-  );
-  attachRestoreListener(
-    responseRulesPromptContainer,
-    responseRulesPromptContainerTextarea,
-    'Are you sure you want to restore the default response rules?',
-    DEFAULT_XML_DESCRIPTION,
-  );
+  // --- Setup Consolidated System Prompts ---
+  {
+    const promptSelect = settingsContainer.querySelector(
+      '#worldInfoRecommender_systemPromptPreset',
+    ) as HTMLSelectElement;
+    const promptTextarea = settingsContainer.querySelector(
+      '#worldInfoRecommender_systemPromptContent',
+    ) as HTMLTextAreaElement;
+    const restoreSystemPromptButton = settingsContainer.querySelector(
+      '#worldInfoRecommender_restoreSystemPromptDefault',
+    ) as HTMLButtonElement;
 
-  // Helper function to attach change listeners for saving settings
-  const attachChangeListener = (
-    textarea: HTMLTextAreaElement | null | undefined,
-    settingKey: keyof typeof settings,
-    defaultKey: keyof typeof settings,
-    defaultValue: string,
-  ) => {
-    textarea!.addEventListener('change', () => {
-      (settings[settingKey] as any) = textarea!.value ?? '';
-      (settings[defaultKey] as any) = (settings[settingKey] as any) === defaultValue;
-      settingsManager.saveSettings();
+    buildPresetSelect('#worldInfoRecommender_systemPromptPreset', {
+      initialList: Object.keys(settings.prompts),
+      readOnlyValues: SYSTEM_PROMPT_KEYS,
+      initialValue: SYSTEM_PROMPT_KEYS[0],
+      label(value) {
+        if (value === '') {
+          return 'prompt';
+        }
+
+        const promptSetting = settings.prompts[value];
+        if (promptSetting) {
+          return `${promptSetting.label} (${value})`;
+        }
+        return value;
+      },
+      create: {
+        onBeforeCreate(value) {
+          const variableName = convertToVariableName(value);
+          if (!variableName) {
+            st_echo('error', `Invalid prompt name: ${value}`);
+            return false;
+          }
+          if (settings.prompts[variableName]) {
+            st_echo('error', `Prompt name already exists: ${variableName}`);
+            return false;
+          }
+
+          return true;
+        },
+        onAfterCreate(value) {
+          const variableName = convertToVariableName(value);
+          settings.prompts[variableName] = {
+            content: promptTextarea.value,
+            isDefault: false,
+            label: value,
+          };
+          Object.entries(settings.mainContextTemplatePresets).forEach(([presetName, preset]) => {
+            preset.prompts.push({
+              enabled: true,
+              promptName: variableName,
+              role: 'user',
+            });
+          });
+          setMainContextList([
+            ...getMainContextList(),
+            {
+              enabled: true,
+              id: variableName,
+              label: `${value} (${variableName})`,
+              selectOptions: [
+                { value: 'user', label: 'User' },
+                { value: 'assistant', label: 'Assistant' },
+                { value: 'system', label: 'System' },
+              ],
+              selectValue: 'user',
+            },
+          ]);
+
+          return variableName;
+        },
+      },
+      rename: {
+        onBeforeRename(_previousValue, newValue) {
+          const variableName = convertToVariableName(newValue);
+          if (!variableName) {
+            st_echo('error', `Invalid prompt name: ${newValue}`);
+            return false;
+          }
+          if (settings.prompts[variableName]) {
+            st_echo('error', `Prompt name already exists: ${variableName}`);
+            return false;
+          }
+
+          return true;
+        },
+        onAfterRename(previousValue, newValue) {
+          const filteredValue = convertToVariableName(newValue);
+          settings.prompts[filteredValue] = { ...settings.prompts[previousValue], label: newValue };
+          delete settings.prompts[previousValue];
+          Object.entries(settings.mainContextTemplatePresets).forEach(([presetName, preset]) => {
+            preset.prompts.forEach((prompt) => {
+              if (prompt.promptName === previousValue) {
+                prompt.promptName = filteredValue;
+              }
+            });
+          });
+
+          setMainContextList(
+            getMainContextList().map((item) => {
+              if (item.id === previousValue) {
+                return {
+                  ...item,
+                  id: filteredValue,
+                  label: `${newValue} (${filteredValue})`,
+                };
+              }
+              return item;
+            }),
+          );
+          return filteredValue;
+        },
+      },
+      delete: {
+        onAfterDelete(value) {
+          delete settings.prompts[value];
+          Object.entries(settings.mainContextTemplatePresets).forEach(([presetName, preset]) => {
+            preset.prompts = preset.prompts.filter((prompt) => prompt.promptName !== value);
+          });
+          setMainContextList(getMainContextList().filter((item) => item.id !== value));
+        },
+      },
+      onSelectChange(_, newValue) {
+        const newPresetValue = newValue ?? '';
+        const promptSetting: PromptSetting | undefined = settings.prompts[newPresetValue];
+        if (promptSetting) {
+          promptTextarea.value = promptSetting.content ?? '';
+          restoreSystemPromptButton.style.display = SYSTEM_PROMPT_KEYS.includes(newPresetValue as SystemPromptKey)
+            ? 'block'
+            : 'none';
+          settingsManager.saveSettings();
+        }
+      },
     });
-  };
 
-  attachChangeListener(
-    stWorldInfoPromptContainerTextarea,
-    'stWorldInfoPrompt',
-    'usingDefaultStWorldInfoPrompt',
-    DEFAULT_ST_DESCRIPTION,
-  );
-  attachChangeListener(
-    lorebookDefinitionPromptContainerTextarea,
-    'lorebookDefinitionPrompt',
-    'usingDefaultLorebookDefinitionPrompt',
-    DEFAULT_LOREBOOK_DEFINITION,
-  );
-  attachChangeListener(
-    lorebookRulesPromptContainerTextarea,
-    'lorebookRulesPrompt',
-    'usingDefaultLorebookRulesPrompt',
-    DEFAULT_LOREBOOK_RULES,
-  );
-  attachChangeListener(
-    responseRulesPromptContainerTextarea,
-    'responseRulesPrompt',
-    'usingDefaultResponseRulesPrompt',
-    DEFAULT_XML_DESCRIPTION,
-  );
+    // Initial state
+    const selectedKey = promptSelect.value;
+    const prompSetting: PromptSetting | undefined = settings.prompts[selectedKey];
+    if (prompSetting) {
+      promptTextarea.value = prompSetting.content ?? '';
+      restoreSystemPromptButton.style.display = SYSTEM_PROMPT_KEYS.includes(selectedKey as SystemPromptKey)
+        ? 'block'
+        : 'none';
+    }
+
+    // Event listener for textarea change
+    promptTextarea.addEventListener('change', () => {
+      const selectedKey = promptSelect.value as SystemPromptKey;
+      const currentContent = promptTextarea.value;
+
+      const prompSetting: PromptSetting | undefined = settings.prompts[selectedKey];
+      if (prompSetting) {
+        prompSetting.content = currentContent;
+        prompSetting.isDefault = SYSTEM_PROMPT_KEYS.includes(selectedKey)
+          ? DEFAULT_PROMPT_CONTENTS[selectedKey] === currentContent
+          : false;
+        restoreSystemPromptButton.style.display = SYSTEM_PROMPT_KEYS.includes(selectedKey) ? 'block' : 'none';
+        settingsManager.saveSettings();
+      }
+    });
+
+    restoreSystemPromptButton.addEventListener('click', async () => {
+      const selectedKey = promptSelect.value as SystemPromptKey;
+      const defaultContent = DEFAULT_PROMPT_CONTENTS[selectedKey];
+      const promptSetting: PromptSetting | undefined = settings.prompts[selectedKey];
+      if (promptSetting) {
+        const confirm = await globalContext.Popup.show.confirm(
+          'Restore Default',
+          `Are you sure you want to restore the default for "${promptSetting.label}"?`,
+        );
+        if (confirm) {
+          promptTextarea.value = defaultContent;
+          promptTextarea.dispatchEvent(new Event('change'));
+        }
+      } else {
+        st_echo('warning', 'No prompt selected.');
+      }
+    });
+  }
+
+  const resetEverythingButton = settingsContainer.querySelector(
+    '#worldInfoRecommender_resetEverything',
+  ) as HTMLButtonElement;
+  resetEverythingButton.addEventListener('click', async () => {
+    const confirm = await globalContext.Popup.show.confirm(
+      'Reset Everything',
+      'Are you sure? This will reset all settings to default. This cannot be undone. This is a destructive action.',
+    );
+    if (confirm) {
+      // Reset all settings to default
+      settingsManager.resetSettings();
+
+      setTimeout(() => {
+        st_echo('success', 'Settings has been reset to default. Please reload the page.');
+      }, 1500);
+    }
+  });
 
   // Create and prepend popup icons
   const popupIconHtml = `<div class="menu_button fa-brands fa-wpexplorer interactable worldInfoRecommender-icon" title="World Info Recommender"></div>`;
@@ -1199,19 +1465,40 @@ async function handleUIChanges(): Promise<void> {
             }
           }
 
+          const promptSettings = structuredClone(settings.prompts);
+          if (!settings.contextToSend.stDescription) {
+            // @ts-ignore
+            delete promptSettings.stDescription;
+          }
+          if (!settings.contextToSend.worldInfo || activeSession.selectedWorldNames.length === 0) {
+            // @ts-ignore
+            delete promptSettings.currentLorebooks;
+          }
+          const anySuggestedEntries = Object.values(activeSession.suggestedEntries).some(
+            (entries) => entries.length > 0,
+          );
+          if (!settings.contextToSend.suggestedEntries || !anySuggestedEntries) {
+            // @ts-ignore
+            delete promptSettings.suggestedLorebooks;
+          }
+          if (activeSession.blackListedEntries.length === 0) {
+            // @ts-ignore
+            delete promptSettings.blackListedEntries;
+          }
+
           const resultingEntries = await runWorldInfoRecommendation({
             profileId: settings.profileId,
             userPrompt: prompt,
             buildPromptOptions: buildPromptOptions,
-            contextToSend: settings.contextToSend,
             session: activeSession,
             entriesGroupByWorldName: entriesGroupByWorldName,
-            promptSettings: {
-              stWorldInfoPrompt: settings.stWorldInfoPrompt,
-              lorebookDefinitionPrompt: settings.lorebookDefinitionPrompt,
-              responseRulesPrompt: settings.responseRulesPrompt,
-              lorebookRulesPrompt: settings.lorebookRulesPrompt,
-            },
+            promptSettings,
+            mainContextList: settings.mainContextTemplatePresets[settings.mainContextTemplatePreset].prompts
+              .filter((p) => p.enabled)
+              .map((p) => ({
+                promptName: p.promptName,
+                role: p.role,
+              })),
             maxResponseToken: settings.maxResponseToken,
           });
 
@@ -1258,52 +1545,9 @@ function main() {
 }
 
 if (!stagingCheck()) {
-  const errorStr = '[World Info Recommender Error] Make sure you are on staging branch and staging is updated.';
-  st_echo('error', errorStr);
+  st_echo('error', `[${extensionName}] Make sure you are on staging branch and staging is updated.`);
 } else {
-  settingsManager
-    .initializeSettings()
-    .then((result) => {
-      if (result.version.changed) {
-        const settings = settingsManager.getSettings();
-        let anyChange = false;
-        if (settings.usingDefaultStWorldInfoPrompt && settings.stWorldInfoPrompt !== DEFAULT_ST_DESCRIPTION) {
-          settings.stWorldInfoPrompt = DEFAULT_ST_DESCRIPTION;
-          anyChange = true;
-        }
-        if (
-          settings.usingDefaultLorebookDefinitionPrompt &&
-          settings.lorebookDefinitionPrompt !== DEFAULT_LOREBOOK_DEFINITION
-        ) {
-          settings.lorebookDefinitionPrompt = DEFAULT_LOREBOOK_DEFINITION;
-          anyChange = true;
-        }
-        if (settings.usingDefaultLorebookRulesPrompt && settings.lorebookRulesPrompt !== DEFAULT_LOREBOOK_RULES) {
-          settings.lorebookRulesPrompt = DEFAULT_LOREBOOK_RULES;
-          anyChange = true;
-        }
-        if (settings.usingDefaultResponseRulesPrompt && settings.responseRulesPrompt !== DEFAULT_XML_DESCRIPTION) {
-          settings.responseRulesPrompt = DEFAULT_XML_DESCRIPTION;
-          anyChange = true;
-        }
-        if (anyChange) {
-          settingsManager.saveSettings();
-        }
-      }
-      main();
-    })
-    .catch((error) => {
-      st_echo('error', error);
-      globalContext.Popup.show
-        .confirm(
-          'Data migration failed. Do you want to reset the World Info Recommender data?',
-          'World Info Recommender',
-        )
-        .then((result) => {
-          if (result) {
-            settingsManager.resetSettings();
-            main();
-          }
-        });
-    });
+  initializeSettings().then(() => {
+    main();
+  });
 }

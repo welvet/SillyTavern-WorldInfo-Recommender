@@ -5,49 +5,55 @@
             <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
         </div>
         <div class="inline-drawer-content">
-            <div class="stWorldInfoPrompt">
+            <div style="margin-top: 10px">
                 <div class="title_restorable">
-                    <span>ST/World Info Definition</span>
+                    <span>Main Context Template</span>
                     <button
-                        class="menu_button fa-solid fa-undo interactable restore_default"
-                        data-i18n="[title]Restore default"
-                        title="Restore default"
+                        id="worldInfoRecommender_restoreMainContextTemplateDefault"
+                        class="menu_button fa-solid fa-undo interactable"
+                        title="Restore main context template to default"
                     ></button>
                 </div>
-                <textarea class="text_pole textarea_compact" placeholder="ST/World Info Definition" rows="4"></textarea>
+                <select
+                    id="worldInfoRecommender_mainContextTemplatePreset"
+                    class="text_pole"
+                    title="Select Main Context Template to Edit"
+                ></select>
+                <div id="worldInfoRecommender_mainContextList"></div>
             </div>
-            <div class="lorebookDefinitionPrompt" style="margin-top: 10px">
+
+            <hr style="margin: 10px 0" />
+
+            <div style="margin-top: 10px">
                 <div class="title_restorable">
-                    <span>Lorebook Definition</span>
+                    <span>Prompt Templates</span>
                     <button
-                        class="menu_button fa-solid fa-undo interactable restore_default"
-                        data-i18n="[title]Restore default"
-                        title="Restore default"
+                        id="worldInfoRecommender_restoreSystemPromptDefault"
+                        class="menu_button fa-solid fa-undo interactable"
+                        title="Restore selected prompt to default"
                     ></button>
                 </div>
-                <textarea class="text_pole textarea_compact" placeholder="Response Rules" rows="4"></textarea>
+                <select
+                    id="worldInfoRecommender_systemPromptPreset"
+                    class="text_pole"
+                    title="Select System Prompt to Edit"
+                ></select>
+                <textarea
+                    id="worldInfoRecommender_systemPromptContent"
+                    class="text_pole textarea_compact"
+                    placeholder="Edit the selected system prompt template here..."
+                    rows="6"
+                    style="margin-top: 5px"
+                ></textarea>
             </div>
-            <div class="lorebookRulesPrompt" style="margin-top: 10px">
-                <div class="title_restorable">
-                    <span>Lorebook Rules</span>
-                    <button
-                        class="menu_button fa-solid fa-undo interactable restore_default"
-                        data-i18n="[title]Restore default"
-                        title="Restore default"
-                    ></button>
-                </div>
-                <textarea class="text_pole textarea_compact" placeholder="Response Rules" rows="4"></textarea>
-            </div>
-            <div class="responseRulesPrompt" style="margin-top: 10px">
-                <div class="title_restorable">
-                    <span title="Don't touch XML parts unless you know what you're doing">Response Rules</span>
-                    <button
-                        class="menu_button fa-solid fa-undo interactable restore_default"
-                        data-i18n="[title]Restore default"
-                        title="Restore default"
-                    ></button>
-                </div>
-                <textarea class="text_pole textarea_compact" placeholder="Response Rules" rows="4"></textarea>
+
+            <hr style="margin: 15px 0" />
+
+            <div style="text-align: center; margin-top: 15px">
+                <button id="worldInfoRecommender_resetEverything" class="menu_button danger_button" style="width: auto">
+                    <i style="margin-right: 10px" class="fa-solid fa-triangle-exclamation"></i> I messed up, reset
+                    everything
+                </button>
             </div>
         </div>
     </div>

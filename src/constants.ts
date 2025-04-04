@@ -89,16 +89,58 @@ Content:
 
 Lorebooks are essential for long-term storytelling with AI.`;
 
-export const DEFAULT_LOREBOOK_DEFINITION = `{{#each lorebooks}}
+export const DEFAULT_CURRENT_LOREBOOKS = `## CURRENT LOREBOOKS
+{{#each currentLorebooks}}
 ## WORLD NAME: {{@key}}
   {{#each this as |entry|}}
 ### (NAME: {{#if entry.comment}}{{entry.comment}}{{else}}*No name*{{/if}}) (ID: {{entry.uid}})
 Triggers: {{#if entry.key}}{{join entry.key ', '}}{{else}}*No triggers*{{/if}}
 Content: {{#if entry.content}}{{entry.content}}{{else}}*No content*{{/if}}
-
   {{/each}}
-
-
 {{/each}}`;
 
-export const DEFAULT_LOREBOOK_RULES = `- Don't suggest already existing or suggested entries.`;
+export const DEFAULT_BLACKLISTED_ENTRIES = `## BLACKLISTED ENTRIES
+{{#each blackListedEntries}}
+- {{this}}
+{{/each}}`;
+
+export const DEFAULT_SUGGESTED_LOREBOOKS = `## SUGGESTED LOREBOOKS
+{{#each suggestedLorebooks}}
+## WORLD NAME: {{@key}}
+  {{#each this as |entry|}}
+### (NAME: {{#if entry.comment}}{{entry.comment}}{{else}}*No name*{{/if}}) (ID: {{entry.uid}})
+Triggers: {{#if entry.key}}{{join entry.key ', '}}{{else}}*No triggers*{{/if}}
+Content: {{#if entry.content}}{{entry.content}}{{else}}*No content*{{/if}}
+  {{/each}}
+{{/each}}`;
+
+export const DEFAULT_XML_DESCRIPTION = `If you are creating a new entry you should write it like this:
+\`\`\`xml
+<lorebooks>
+    <entry>
+        <worldName>World 1</worldName>
+        <name>Book 1</name>
+        <triggers>word1,word2</triggers>
+        <content>Content of book 1</content>
+    </entry>
+</lorebooks>
+\`\`\`
+
+If you are updating an existing entry you should specify the id of the entry. Like this:
+\`\`\`xml
+<lorebooks>
+    <entry>
+        <worldName>World 1</worldName>
+        <id>15</id> // Id should be the id of the entry
+        <name>Book 1</name>
+        <triggers>word1,word2</triggers>
+        <content>Content of book 1</content>
+    </entry>
+</lorebooks>
+\`\`\``;
+
+export const DEFAULT_TASK_DESCRIPTION = `## Rules
+- Don't suggest already existing or suggested entries.
+
+## Your Task
+{{userInstructions}}`;
