@@ -407,7 +407,7 @@ async function handleUIChanges(): Promise<void> {
   resetEverythingButton.addEventListener('click', async () => {
     const confirm = await globalContext.Popup.show.confirm(
       'Reset Everything',
-      'Are you sure? This will reset all settings to default. This cannot be undone. This is a destructive action.',
+      'Are you sure? This will reset all settings to default, including your prompt presets. This cannot be undone.',
     );
     if (confirm) {
       // Reset all settings to default
