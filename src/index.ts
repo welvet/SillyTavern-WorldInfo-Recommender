@@ -808,6 +808,7 @@ async function handleUIChanges(): Promise<void> {
             Object.assign(targetEntry, lastEntry);
           }
           targetEntry.uid = newId;
+          targetEntry.keysecondary = [];
         }
 
         // Update entry properties

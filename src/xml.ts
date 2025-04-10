@@ -36,6 +36,7 @@ export function parseXMLOwn(xml: string): Record<string, WIEntry[]> {
         content: entry.content,
         comment: entry.name,
         disable: false,
+        keysecondary: [],
       });
     }
 
