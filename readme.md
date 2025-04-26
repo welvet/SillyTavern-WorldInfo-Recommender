@@ -1,7 +1,5 @@
 # SillyTavern World Info Recommender (WREC)
 
-**To use the extension, you need to be on the `staging` branch of SillyTavern.**
-
 ## Overview
 
 A [SillyTavern](https://docs.sillytavern.app/) extension that helps you manage [world info](https://docs.sillytavern.app/usage/core-concepts/worldinfo/) based on the current context with LLMs using [connection profiles](https://docs.sillytavern.app/usage/core-concepts/connection-profiles/).
