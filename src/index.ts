@@ -913,7 +913,7 @@ async function handleUIChanges(): Promise<void> {
 
             commentEl!.textContent = entry.comment;
             keyEl!.textContent = entry.key.join(', ');
-            contentEl!.innerHTML = converter.makeHtml(entry.content);
+            contentEl!.innerHTML = converter.makeHtml(entry.content ?? '');
 
             if (type === 'classic') {
               if (!existingEntry) {
@@ -1103,7 +1103,7 @@ async function handleUIChanges(): Promise<void> {
                 const confirmed = await globalContext.callGenericPopup(mainDiv, POPUP_TYPE.CONFIRM);
                 if (!confirmed) return;
 
-                const newContent = resultTextarea.value;
+                const newContent = resultTextarea.value ?? '';
 
                 if (getRegexList && getRegexOrder) {
                   const finalOrder = getRegexOrder();
