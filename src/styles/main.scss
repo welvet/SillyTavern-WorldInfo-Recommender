@@ -133,7 +133,8 @@
                 height: fit-content;
             }
 
-            .add {
+            .add,
+            .continue {
                 background-color: var(--active);
 
                 &:hover {

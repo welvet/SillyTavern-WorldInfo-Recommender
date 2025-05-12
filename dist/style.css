@@ -123,10 +123,12 @@
   font-size: 0.9em;
   height: fit-content;
 }
-#worldInfoRecommenderPopup .entry .menu .add {
+#worldInfoRecommenderPopup .entry .menu .add,
+#worldInfoRecommenderPopup .entry .menu .continue {
   background-color: var(--active);
 }
-#worldInfoRecommenderPopup .entry .menu .add:hover {
+#worldInfoRecommenderPopup .entry .menu .add:hover,
+#worldInfoRecommenderPopup .entry .menu .continue:hover {
   background-color: color-mix(in srgb, var(--active) 85%, white);
 }
 #worldInfoRecommenderPopup .entry .menu .blacklist {

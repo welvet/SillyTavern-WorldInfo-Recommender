@@ -9,13 +9,33 @@ function createRandomNumber(length: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-export function parseXMLOwn(xml: string): Record<string, WIEntry[]> {
+interface XmlParseOptions {
+  previousContent?: string;
+}
+
+export function parseXMLOwn(xml: string, options: XmlParseOptions = {}): Record<string, WIEntry[]> {
+  let processedXml = xml;
+  const { previousContent } = options;
+
   // Remove code blocks
-  const xmlWithoutCodeBlocks = xml.replace(/```xml/g, '').replace(/```/g, '');
+  processedXml = processedXml.replace(/```xml/g, '').replace(/```/g, '');
+
+  // Merge with previous content if exists
+  if (previousContent) {
+    processedXml = previousContent + processedXml.trimEnd();
+  }
+
+  // Ensure XML is complete by checking for imbalanced tags
+  if (processedXml.includes('<entry>') && !processedXml.includes('</entry>')) {
+    throw new Error('Incomplete XML: Missing </entry> tag');
+  }
+  if (processedXml.includes('<content>') && !processedXml.includes('</content>')) {
+    throw new Error('Incomplete XML: Missing </content> tag');
+  }
 
   const entriesByWorldName: Record<string, WIEntry[]> = {};
   try {
-    const rawResponse = parser.parse(xmlWithoutCodeBlocks);
+    const rawResponse = parser.parse(processedXml);
     // console.log('Raw response', rawResponse);
     if (!rawResponse.lorebooks) {
       return entriesByWorldName;
@@ -45,4 +65,15 @@ export function parseXMLOwn(xml: string): Record<string, WIEntry[]> {
     console.error(error);
     throw new Error('Model response is not valid XML');
   }
+}
+
+export function getPrefilledXML(worldName: string, entry: WIEntry): string {
+  return `
+<lorebooks>
+  <entry>
+    <worldName>${worldName}</worldName>
+    <id>${entry.uid}</id>
+    <name>${entry.comment}</name>
+    <triggers>${entry.key.join(',')}</triggers>
+    <content>${entry.content}`;
 }

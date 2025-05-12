@@ -1,6 +1,6 @@
 import { buildPrompt, BuildPromptOptions, ExtensionSettingsManager, Message } from 'sillytavern-utils-lib';
 import { ExtractedData } from 'sillytavern-utils-lib/types';
-import { parseXMLOwn } from './xml.js';
+import { getPrefilledXML, parseXMLOwn } from './xml.js';
 import { WIEntry } from 'sillytavern-utils-lib/types/world-info';
 import { st_createWorldInfoEntry } from 'sillytavern-utils-lib/config';
 import { ExtensionSettings, MessageRole } from './settings.js';
@@ -33,6 +33,7 @@ export interface RunWorldInfoRecommendationParams {
     role: MessageRole;
   }[];
   maxResponseToken: number;
+  continueFrom?: { worldName: string; entry: WIEntry };
 }
 
 export async function runWorldInfoRecommendation({
@@ -44,6 +45,7 @@ export async function runWorldInfoRecommendation({
   promptSettings,
   mainContextList,
   maxResponseToken,
+  continueFrom,
 }: RunWorldInfoRecommendationParams): Promise<Record<string, WIEntry[]>> {
   if (!profileId) {
     throw new Error('No connection profile selected.');
@@ -86,7 +88,9 @@ export async function runWorldInfoRecommendation({
     Object.entries(session.suggestedEntries)
       .filter(([_, entries]) => entries.length > 0)
       .forEach(([worldName, entries]) => {
-        lorebooks[worldName] = entries;
+        lorebooks[worldName] = entries.filter(
+          (e) => !(worldName === continueFrom?.worldName && e.uid === continueFrom.entry.uid),
+        );
       });
 
     templateData['suggestedLorebooks'] = lorebooks;
@@ -97,11 +101,7 @@ export async function runWorldInfoRecommendation({
     for (const mainContext of mainContextList) {
       // Chat history is exception, since it is not a template
       if (mainContext.promptName === 'chatHistory') {
-        const chatHistory = (await buildPrompt(selectedApi, buildPromptOptions)).map((message) => ({
-          role: message.role,
-          content: message.content,
-        }));
-        messages.push(...chatHistory);
+        messages.push(...(await buildPrompt(selectedApi, buildPromptOptions)));
         continue;
       }
 
@@ -118,6 +118,14 @@ export async function runWorldInfoRecommendation({
         messages.push(message);
       }
     }
+
+    // If continuing add its content as last message
+    if (continueFrom) {
+      messages.push({
+        role: 'assistant',
+        content: getPrefilledXML(continueFrom.worldName, continueFrom.entry),
+      });
+    }
   }
 
   // console.log("Sending messages:", messages);
@@ -130,7 +138,9 @@ export async function runWorldInfoRecommendation({
 
   // console.log("Received content:", response.content);
 
-  const parsedEntries = parseXMLOwn(response.content);
+  let parsedEntries = parseXMLOwn(response.content, {
+    previousContent: continueFrom ? messages[messages.length - 1].content : undefined,
+  });
   if (Object.keys(parsedEntries).length === 0) {
     return {};
   }
@@ -156,6 +166,10 @@ export async function runWorldInfoRecommendation({
       }
     });
   });
+
+  parsedEntries = continueFrom
+    ? { [continueFrom.worldName]: [parsedEntries[continueFrom.worldName][0]] }
+    : parsedEntries;
 
   return parsedEntries;
 }

@@ -936,6 +936,29 @@ async function handleUIChanges(): Promise<void> {
               blacklistButton!.addEventListener('click', (e) => handleRemove(e, true));
               addButton!.addEventListener('click', handleAdd);
 
+              const continueButton = node.querySelector<HTMLButtonElement>('.continue');
+              continueButton?.addEventListener('click', async (event) => {
+                const btn = event.currentTarget as HTMLButtonElement;
+                const entry = btn.closest<HTMLDivElement>('.entry');
+                if (!entry) return;
+
+                const worldName = entry.dataset.worldName;
+                const idStr = entry.dataset.id;
+                if (!worldName || !idStr) return;
+
+                const suggestedEntry = activeSession.suggestedEntries[worldName]?.find(
+                  (e) => e.uid === parseInt(idStr),
+                );
+                if (!suggestedEntry) return;
+
+                btn.disabled = true;
+                try {
+                  await handleGeneration({ entry: suggestedEntry, worldName });
+                } finally {
+                  btn.disabled = false;
+                }
+              });
+
               const editButtonButton = node.querySelector<HTMLButtonElement>('.edit');
               editButtonButton!.addEventListener('click', async () => {
                 const uid = parseInt(node.dataset.id ?? '');
@@ -1401,7 +1424,7 @@ async function handleUIChanges(): Promise<void> {
         }
       });
 
-      sendButton!.addEventListener('click', async () => {
+      async function handleGeneration(continueFrom?: { worldName: string; entry: WIEntry }) {
         if (!sendButton || !promptTextarea) return;
         sendButton.disabled = true;
 
@@ -1521,6 +1544,7 @@ async function handleUIChanges(): Promise<void> {
                 role: p.role,
               })),
             maxResponseToken: settings.maxResponseToken,
+            continueFrom,
           });
 
           if (Object.keys(resultingEntries).length > 0) {
@@ -1535,7 +1559,9 @@ async function handleUIChanges(): Promise<void> {
         } finally {
           sendButton.disabled = false;
         }
-      });
+      }
+
+      sendButton!.addEventListener('click', () => handleGeneration());
     });
   });
 }
