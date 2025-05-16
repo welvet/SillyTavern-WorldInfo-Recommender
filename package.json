@@ -18,6 +18,7 @@
         "@babel/plugin-proposal-private-property-in-object": "^7.21.11",
         "@babel/preset-env": "^7.24.0",
         "@babel/preset-typescript": "^7.26.0",
+        "@types/diff": "^7.0.2",
         "@types/jest": "^29.5.14",
         "@types/jquery": "^3.5.32",
         "@types/node": "^22.13.1",
@@ -36,9 +37,10 @@
         "webpack-cli": "^5.1.4"
     },
     "dependencies": {
+        "diff": "^8.0.1",
         "fast-xml-parser": "^5.0.9",
-        "showdown": "^2.1.0",
         "handlebars": "^4.7.8",
+        "showdown": "^2.1.0",
         "sillytavern-utils-lib": "^1.0.47"
     }
 }

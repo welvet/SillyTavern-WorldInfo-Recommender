@@ -1,3 +1,4 @@
+import { diffWords } from 'diff';
 import {
   buildFancyDropdown,
   buildPresetSelect,
@@ -869,10 +870,17 @@ async function handleUIChanges(): Promise<void> {
             node.dataset.comment = entry.comment;
 
             const addButton = node.querySelector<HTMLButtonElement>('.add');
+            const compareButton = node.querySelector<HTMLButtonElement>('.compare');
 
-            const updateAddButtonText = (selectedWorld: string) => {
+            const updateButtonStates = (selectedWorld: string) => {
               const existingInLorebook = entriesGroupByWorldName[selectedWorld]?.find((e) => e.uid === entry.uid);
-              addButton!.textContent = existingInLorebook ? 'Update' : 'Add';
+              if (existingInLorebook) {
+                addButton!.textContent = 'Update';
+                compareButton!.style.display = 'inline-block';
+              } else {
+                addButton!.textContent = 'Add';
+                compareButton!.style.display = 'none';
+              }
             };
 
             // Populate world select dropdown
@@ -896,15 +904,15 @@ async function handleUIChanges(): Promise<void> {
                 return;
               }
               const selectedWorldName = allWorldNames[selectedIndex];
-              updateAddButtonText(selectedWorldName);
+              updateButtonStates(selectedWorldName);
             });
 
             // Update button text based on initial/current world selection
             if (worldSelect) {
               const initialSelectedWorld = allWorldNames[parseInt(worldSelect.value)] ?? finalWorldName;
-              updateAddButtonText(initialSelectedWorld);
+              updateButtonStates(initialSelectedWorld);
             } else {
-              updateAddButtonText(finalWorldName);
+              updateButtonStates(finalWorldName);
             }
 
             const commentEl = node.querySelector<HTMLElement>('.comment');
@@ -935,6 +943,109 @@ async function handleUIChanges(): Promise<void> {
               removeButton!.addEventListener('click', (e) => handleRemove(e, false));
               blacklistButton!.addEventListener('click', (e) => handleRemove(e, true));
               addButton!.addEventListener('click', handleAdd);
+
+              const compareButton = node.querySelector<HTMLButtonElement>('.compare');
+              compareButton!.addEventListener('click', async () => {
+                const uid = parseInt(node.dataset.id ?? '');
+                const worldName = node.dataset.worldName ?? '';
+                const comment = node.dataset.comment;
+
+                const entryIndex = activeSession.suggestedEntries[worldName]?.findIndex(
+                  (e) => e.uid === uid && e.comment === comment,
+                );
+                const entry =
+                  entryIndex !== undefined && entryIndex !== -1
+                    ? activeSession.suggestedEntries[worldName][entryIndex]
+                    : undefined;
+
+                if (!entry) {
+                  st_echo('error', 'Original suggested entry not found in session for comparison.');
+                  node.remove();
+                  saveSession();
+                  return;
+                }
+
+                // Find existing entry in lorebook
+                const worldSelect = node.querySelector<HTMLSelectElement>('.world-select');
+                const selectedIndex = parseInt(worldSelect!.value);
+                if (isNaN(selectedIndex) || selectedIndex < 0 || selectedIndex >= allWorldNames.length) {
+                  st_echo('warning', 'Please select a valid world for comparison.');
+                  return;
+                }
+                const selectedWorldName = allWorldNames[selectedIndex];
+                const existingEntry = entriesGroupByWorldName[selectedWorldName]?.find((e) => e.uid === entry.uid);
+
+                if (!existingEntry) {
+                  st_echo('warning', 'No existing entry found to compare with.');
+                  return;
+                }
+
+                const mainDiv = document.createElement('div');
+                mainDiv.classList.add('compare-popup');
+
+                const compareTitle = document.createElement('h3');
+                compareTitle.textContent = 'Compare Changes';
+                mainDiv.appendChild(compareTitle);
+
+                // Create containers for original and new content
+                const compareContainer = document.createElement('div');
+                compareContainer.style.display = 'flex';
+                compareContainer.style.gap = '1rem';
+                compareContainer.style.marginTop = '1rem';
+
+                const originalContent = document.createElement('div');
+                originalContent.style.flex = '1';
+                const newContent = document.createElement('div');
+                newContent.style.flex = '1';
+
+                const originalTitle = document.createElement('h4');
+                originalTitle.textContent = 'Original Content';
+                const newTitle = document.createElement('h4');
+                newTitle.textContent = 'New Content';
+
+                originalContent.appendChild(originalTitle);
+                newContent.appendChild(newTitle);
+
+                // Show word-level diff
+                const diff = diffWords(existingEntry.content, entry.content);
+                let originalHtml = '';
+                let newHtml = '';
+
+                diff.forEach((part) => {
+                  const color = part.added ? 'green' : part.removed ? 'red' : 'grey';
+                  const spanStyle = `color: ${color}; ${part.added || part.removed ? 'background-color: rgba(0,0,0,0.1);' : ''}`;
+
+                  if (!part.added) {
+                    originalHtml += `<span style="${spanStyle}">${part.value}</span>`;
+                  }
+                  if (!part.removed) {
+                    newHtml += `<span style="${spanStyle}">${part.value}</span>`;
+                  }
+                });
+
+                const originalContentText = document.createElement('div');
+                originalContentText.innerHTML = originalHtml;
+                originalContentText.style.whiteSpace = 'pre-wrap';
+                originalContentText.style.fontFamily = 'monospace';
+                originalContentText.style.padding = '1rem';
+                originalContentText.style.border = '1px solid #ccc';
+
+                const newContentText = document.createElement('div');
+                newContentText.innerHTML = newHtml;
+                newContentText.style.whiteSpace = 'pre-wrap';
+                newContentText.style.fontFamily = 'monospace';
+                newContentText.style.padding = '1rem';
+                newContentText.style.border = '1px solid #ccc';
+
+                originalContent.appendChild(originalContentText);
+                newContent.appendChild(newContentText);
+
+                compareContainer.appendChild(originalContent);
+                compareContainer.appendChild(newContent);
+                mainDiv.appendChild(compareContainer);
+
+                await globalContext.callGenericPopup(mainDiv, POPUP_TYPE.DISPLAY);
+              });
 
               const continueButton = node.querySelector<HTMLButtonElement>('.continue');
               continueButton?.addEventListener('click', async (event) => {
