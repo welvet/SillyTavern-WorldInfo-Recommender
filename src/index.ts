@@ -1076,28 +1076,55 @@ async function handleUIChanges(): Promise<void> {
                 const worldName = node.dataset.worldName ?? '';
                 const comment = node.dataset.comment;
 
-                const entryIndex = activeSession.suggestedEntries[worldName]?.findIndex(
-                  (e) => e.uid === uid && e.comment === comment,
-                );
-                const entry =
-                  entryIndex !== undefined && entryIndex !== -1
-                    ? activeSession.suggestedEntries[worldName][entryIndex]
-                    : undefined;
+                const entryIndex = activeSession.suggestedEntries[worldName]?.findIndex((e) => e.uid === uid);
 
-                if (!entry) {
+                if (entryIndex === undefined || entryIndex === -1) {
                   st_echo('error', 'Original suggested entry not found in session for regex editing.');
-                  // Entry might have been removed/added elsewhere. If node exists, remove it.
                   node.remove();
-                  saveSession(); // Save the removal if it happened concurrently
+                  saveSession();
                   return;
                 }
+
+                const entry = activeSession.suggestedEntries[worldName][entryIndex];
 
                 const allRegexes = context.extensionSettings.regex ?? [];
 
                 const mainDiv = document.createElement('div');
                 mainDiv.classList.add('edit-popup');
+                const editTitle = document.createElement('h3');
+                editTitle.textContent = 'Edit Suggestion';
+                mainDiv.appendChild(editTitle);
+
+                // Add title (comment) input
+                const titleContainer = document.createElement('div');
+                const titleLabel = document.createElement('label');
+                titleLabel.textContent = 'Title';
+                titleContainer.appendChild(titleLabel);
+
+                const titleInput = document.createElement('input');
+                titleInput.type = 'text';
+                titleInput.className = 'text_pole';
+                titleInput.value = entry.comment;
+                titleContainer.appendChild(titleInput);
+                mainDiv.appendChild(titleContainer);
+
+                // Add keywords input
+                const keywordsContainer = document.createElement('div');
+                keywordsContainer.style.marginTop = '1rem';
+                const keywordsLabel = document.createElement('label');
+                keywordsLabel.textContent = 'Keywords (comma-separated)';
+                keywordsContainer.appendChild(keywordsLabel);
+
+                const keywordsInput = document.createElement('input');
+                keywordsInput.type = 'text';
+                keywordsInput.className = 'text_pole';
+                keywordsInput.value = entry.key.join(', ');
+                keywordsContainer.appendChild(keywordsInput);
+                mainDiv.appendChild(keywordsContainer);
+
                 const regexTitle = document.createElement('h3');
-                regexTitle.textContent = 'Edit Suggestion';
+                regexTitle.textContent = 'Apply Regex Scripts';
+                regexTitle.style.marginTop = '1.5rem';
                 mainDiv.appendChild(regexTitle);
 
                 let resultTextarea: HTMLTextAreaElement | null = null;
@@ -1249,15 +1276,35 @@ async function handleUIChanges(): Promise<void> {
                   );
                 }
 
+                // Process the keywords input
+                const newKeywords = keywordsInput.value
+                  .split(',')
+                  .map((k) => k.trim())
+                  .filter((k) => k.length > 0);
+
+                const newTitle = titleInput.value.trim();
+                if (newTitle) {
+                  entry.comment = newTitle;
+                  node.dataset.comment = newTitle;
+                  const commentEl = node.querySelector<HTMLElement>('.comment');
+                  if (commentEl) {
+                    commentEl.textContent = newTitle;
+                  }
+                }
+
+                entry.key = newKeywords;
+                const keyEl = node.querySelector<HTMLElement>('.key');
+                if (keyEl) {
+                  keyEl.textContent = newKeywords.join(', ');
+                }
+
                 editButtonButton!.disabled = true;
                 const regularAddButton = node.querySelector<HTMLButtonElement>('.add');
                 if (regularAddButton) regularAddButton.disabled = true; // Keep Add button disabled too during this process
 
                 try {
                   // Retrieve the entry *again* in case something changed while popup was open, though unlikely
-                  const entryToUpdateIndex = activeSession.suggestedEntries[worldName]?.findIndex(
-                    (e) => e.uid === uid && e.comment === comment,
-                  );
+                  const entryToUpdateIndex = activeSession.suggestedEntries[worldName]?.findIndex((e) => e.uid === uid);
 
                   if (entryToUpdateIndex === undefined || entryToUpdateIndex === -1) {
                     st_echo('error', 'Suggested entry disappeared while editing.');
