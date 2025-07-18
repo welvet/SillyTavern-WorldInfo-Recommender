@@ -426,8 +426,14 @@ async function handleUIChanges(): Promise<void> {
   tempDiv.innerHTML = popupIconHtml.trim();
   const popupIconTemplate = tempDiv.firstChild as HTMLElement | null;
 
-  const targetSelectors = '.form_create_bottom_buttons_block, #GroupFavDelOkBack, #form_character_search_form';
-  document.querySelectorAll(targetSelectors).forEach((target) => {
+  const targets = [
+    document.querySelector('.form_create_bottom_buttons_block'),
+    document.querySelector('#GroupFavDelOkBack'),
+    document.querySelector('#rm_buttons_container') ?? document.querySelector('#form_character_search_form'),
+  ];
+
+  targets.forEach((target) => {
+    if (target === null) { return; }
     target.insertBefore(popupIconTemplate!.cloneNode(true), target.firstChild);
   });
 
