@@ -1,5 +1,4 @@
-import React, { FC, useState, useEffect, useCallback, useMemo } from 'react';
-import { diffWords } from 'diff';
+import { FC, useState, useEffect, useCallback, useMemo } from 'react';
 import showdown from 'showdown';
 import {
   STButton,
@@ -9,7 +8,6 @@ import {
   STTextarea,
   PresetItem,
   DropdownItem as FancyDropdownItem,
-  Popup,
 } from 'sillytavern-utils-lib/components';
 import { BuildPromptOptions, getActiveWorldInfo } from 'sillytavern-utils-lib';
 import {
@@ -27,9 +25,7 @@ import { runWorldInfoRecommendation, Session } from '../generate.js';
 import { ExtensionSettings, settingsManager } from '../settings.js';
 import { Character } from 'sillytavern-utils-lib/types';
 import { RegexScriptData } from 'sillytavern-utils-lib/types/regex';
-import { POPUP_TYPE } from 'sillytavern-utils-lib/types/popup';
-import { EditEntryPopup } from './EditEntryPopup.js';
-import { CompareEntryPopup } from './CompareEntryPopup.js';
+import { SuggestedEntry } from './SuggestedEntry.js';
 
 const globalContext = SillyTavern.getContext();
 const converter = new showdown.Converter();
@@ -424,16 +420,20 @@ export const MainPopup: FC = () => {
 
   const handleUpdateEntry = (
     worldName: string,
+    originalEntry: WIEntry, // <-- Add this parameter
     updatedEntry: WIEntry,
     updatedRegexIds: Record<string, Partial<RegexScriptData>>,
   ) => {
     setSession((prev) => {
       const newSuggested = { ...prev.suggestedEntries };
       if (newSuggested[worldName]) {
+        // Use the ORIGINAL entry's comment and uid to find the correct item
         const entryIndex = newSuggested[worldName].findIndex(
-          (e) => e.uid === updatedEntry.uid && e.comment === updatedEntry.comment,
+          (e) => e.uid === originalEntry.uid && e.comment === originalEntry.comment,
         );
+
         if (entryIndex !== -1) {
+          // If found, replace it with the updated entry
           newSuggested[worldName][entryIndex] = updatedEntry;
         }
       }
@@ -492,7 +492,81 @@ export const MainPopup: FC = () => {
                   <option value="last">Last X Messages</option>
                   <option value="range">Range</option>
                 </select>
-                {/* ... inputs for first/last/range ... */}
+
+                {settings.contextToSend.messages.type === 'first' && (
+                  <div style={{ marginTop: '10px' }}>
+                    <label>
+                      First{' '}
+                      <input
+                        type="number"
+                        className="text_pole small message-input"
+                        min="1"
+                        value={settings.contextToSend.messages.first ?? 10}
+                        onChange={(e) =>
+                          updateContextToSend('messages', {
+                            ...settings.contextToSend.messages,
+                            first: parseInt(e.target.value) || 10,
+                          })
+                        }
+                      />{' '}
+                      Messages
+                    </label>
+                  </div>
+                )}
+                {settings.contextToSend.messages.type === 'last' && (
+                  <div style={{ marginTop: '10px' }}>
+                    <label>
+                      Last{' '}
+                      <input
+                        type="number"
+                        className="text_pole small message-input"
+                        min="1"
+                        value={settings.contextToSend.messages.last ?? 10}
+                        onChange={(e) =>
+                          updateContextToSend('messages', {
+                            ...settings.contextToSend.messages,
+                            last: parseInt(e.target.value) || 10,
+                          })
+                        }
+                      />{' '}
+                      Messages
+                    </label>
+                  </div>
+                )}
+                {settings.contextToSend.messages.type === 'range' && (
+                  <div style={{ marginTop: '10px' }}>
+                    <label>
+                      Range:{' '}
+                      <input
+                        type="number"
+                        className="text_pole small message-input"
+                        min="0"
+                        placeholder="Start"
+                        value={settings.contextToSend.messages.range?.start ?? 0}
+                        onChange={(e) =>
+                          updateContextToSend('messages', {
+                            ...settings.contextToSend.messages,
+                            range: { ...settings.contextToSend.messages.range!, start: parseInt(e.target.value) || 0 },
+                          })
+                        }
+                      />{' '}
+                      to{' '}
+                      <input
+                        type="number"
+                        className="text_pole small message-input"
+                        min="1"
+                        placeholder="End"
+                        value={settings.contextToSend.messages.range?.end ?? 10}
+                        onChange={(e) =>
+                          updateContextToSend('messages', {
+                            ...settings.contextToSend.messages,
+                            range: { ...settings.contextToSend.messages.range!, end: parseInt(e.target.value) || 10 },
+                          })
+                        }
+                      />
+                    </label>
+                  </div>
+                )}
               </div>
               <label className="checkbox_label">
                 <input
@@ -551,7 +625,48 @@ export const MainPopup: FC = () => {
             </div>
           </div>
 
-          <div className="card">{/* Max Context and Max Response Tokens */}</div>
+          <div className="card">
+            <label>
+              Max Context
+              <select
+                className="text_pole"
+                title="Select Max Context Type"
+                value={settings.maxContextType}
+                onChange={(e) => updateSetting('maxContextType', e.target.value as any)}
+              >
+                <option value="profile">Use profile preset</option>
+                <option value="sampler">Use active preset in sampler settings</option>
+                <option value="custom">Custom</option>
+              </select>
+            </label>
+
+            {settings.maxContextType === 'custom' && (
+              <label style={{ marginTop: '10px' }}>
+                <input
+                  type="number"
+                  className="text_pole"
+                  min="1"
+                  step="1"
+                  placeholder="Enter max tokens"
+                  value={settings.maxContextValue}
+                  onChange={(e) => updateSetting('maxContextValue', parseInt(e.target.value) || 2048)}
+                />
+              </label>
+            )}
+
+            <label style={{ display: 'block', marginTop: '10px' }}>
+              Max Response Tokens
+              <input
+                type="number"
+                className="text_pole"
+                min="1"
+                step="1"
+                placeholder="Enter max response tokens"
+                value={settings.maxResponseToken}
+                onChange={(e) => updateSetting('maxResponseToken', parseInt(e.target.value) || 256)}
+              />
+            </label>
+          </div>
 
           <div className="card">
             <h3>Your Prompt</h3>
@@ -637,141 +752,5 @@ export const MainPopup: FC = () => {
         </div>
       </div>
     </div>
-  );
-};
-
-// --- Child Component for a single suggestion ---
-interface SuggestedEntryProps {
-  initialWorldName: string;
-  entry: WIEntry;
-  allWorldNames: string[];
-  existingEntry?: WIEntry;
-  sessionRegexIds: Record<string, Partial<RegexScriptData>>;
-  onAdd: (entry: WIEntry, initialWorldName: string, selectedTargetWorld: string) => void;
-  onRemove: (entry: WIEntry, initialWorldName: string, isBlacklist: boolean) => void;
-  onContinue: (continueFrom: { worldName: string; entry: WIEntry }) => void;
-  onUpdate: (
-    worldName: string,
-    updatedEntry: WIEntry,
-    updatedRegexIds: Record<string, Partial<RegexScriptData>>,
-  ) => void;
-  entriesGroupByWorldName: Record<string, WIEntry[]>;
-}
-
-const SuggestedEntry: FC<SuggestedEntryProps> = ({
-  initialWorldName,
-  entry,
-  allWorldNames,
-  existingEntry,
-  sessionRegexIds,
-  onAdd,
-  onRemove,
-  onContinue,
-  onUpdate,
-  entriesGroupByWorldName,
-}) => {
-  const [selectedWorld, setSelectedWorld] = useState(() => {
-    const initial = allWorldNames.find((w) => w === initialWorldName);
-    return initial ?? allWorldNames[0] ?? '';
-  });
-  const [isAdding, setIsAdding] = useState(false);
-  const [isContinuing, setIsContinuing] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [isComparing, setIsComparing] = useState(false);
-
-  const isUpdate = useMemo(
-    () => !!entriesGroupByWorldName[selectedWorld]?.find((e) => e.uid === entry.uid),
-    [selectedWorld, entry.uid],
-  );
-
-  const handleAddClick = async () => {
-    setIsAdding(true);
-    await onAdd(entry, initialWorldName, selectedWorld);
-    // The component will be unmounted by parent state change, so no need to setIsAdding(false)
-  };
-
-  const handleContinueClick = async () => {
-    setIsContinuing(true);
-    await onContinue({ worldName: initialWorldName, entry });
-    setIsContinuing(false);
-  };
-
-  const handleSaveEdit = (updatedEntry: WIEntry, updatedRegexIds: Record<string, Partial<RegexScriptData>>) => {
-    onUpdate(initialWorldName, updatedEntry, updatedRegexIds);
-    setIsEditing(false); // Close the popup
-  };
-
-  return (
-    <>
-      {' '}
-      {/* Use a fragment to wrap the entry and its potential popup */}
-      <div className="entry" data-id={entry.uid} data-world-name={initialWorldName}>
-        <div className="menu">
-          <select
-            className="world-select text_pole"
-            value={selectedWorld}
-            onChange={(e) => setSelectedWorld(e.target.value)}
-          >
-            {allWorldNames.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-          <STButton onClick={handleAddClick} disabled={isAdding} className="menu_button interactable add">
-            {isUpdate ? 'Update' : 'Add'}
-          </STButton>
-          <STButton onClick={handleContinueClick} disabled={isContinuing} className="menu_button interactable continue">
-            {isContinuing ? '...' : 'Continue'}
-          </STButton>
-          <STButton onClick={() => setIsEditing(true)} className="menu_button interactable edit">
-            Edit
-          </STButton>{' '}
-          {isUpdate && (
-            <STButton
-              onClick={() => setIsComparing(true)}
-              className="menu_button interactable compare"
-            >
-              Compare
-            </STButton>
-          )}
-          <STButton
-            onClick={() => onRemove(entry, initialWorldName, true)}
-            className="menu_button interactable blacklist"
-          >
-            Blacklist
-          </STButton>
-          <STButton
-            onClick={() => onRemove(entry, initialWorldName, false)}
-            className="menu_button interactable remove"
-          >
-            Remove
-          </STButton>
-        </div>
-        <h4 className="comment">{entry.comment}</h4>
-        <div className="key">{entry.key.join(', ')}</div>
-        <p className="content" dangerouslySetInnerHTML={{ __html: converter.makeHtml(entry.content ?? '') }}></p>
-      </div>
-      {/* Conditionally render the Edit Popup */}
-      {isEditing && (
-        <Popup
-          type={POPUP_TYPE.CONFIRM}
-          content={<EditEntryPopup entry={entry} initialRegexIds={sessionRegexIds} />}
-          onComplete={(confirmed) => {
-            setIsEditing(false);
-            if (confirmed) {
-              handleSaveEdit(entry, sessionRegexIds);
-            }
-          }}
-        />
-      )}
-      {isComparing && existingEntry && (
-        <Popup
-          type={POPUP_TYPE.DISPLAY}
-          content={<CompareEntryPopup originalEntry={existingEntry} newEntry={entry} />}
-          onComplete={() => setIsComparing(false)}
-        />
-      )}
-    </>
   );
 };

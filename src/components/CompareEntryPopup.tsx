@@ -19,8 +19,8 @@ export const CompareEntryPopup: FC<CompareEntryPopupProps> = ({ originalEntry, n
       const style = part.added
         ? 'color: green; background-color: #e6ffed;'
         : part.removed
-        ? 'color: red; background-color: #ffebe9;'
-        : 'color: grey;';
+          ? 'color: red; background-color: #ffebe9;'
+          : 'color: grey;';
 
       const span = `<span style="${style}">${part.value}</span>`;
 

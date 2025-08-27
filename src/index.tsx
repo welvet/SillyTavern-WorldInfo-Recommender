@@ -2,10 +2,8 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { extensionName, initializeSettings } from './settings.js';
 import { WorldInfoRecommenderSettings } from './components/Settings.js';
-import { MainPopup } from './components/MainPopup.js';
 import { st_echo } from 'sillytavern-utils-lib/config';
-import { Popup } from 'sillytavern-utils-lib/components';
-import { POPUP_TYPE } from 'sillytavern-utils-lib/types/popup';
+import { PopupManager } from './components/PopupManager.js';
 
 const globalContext = SillyTavern.getContext();
 
@@ -41,6 +39,15 @@ export async function init() {
     document.querySelector('#rm_buttons_container') ?? document.querySelector('#form_character_search_form'),
   ];
 
+  const popupManagerContainer = document.createElement('div');
+  document.body.appendChild(popupManagerContainer);
+  const popupManagerRoot = ReactDOM.createRoot(popupManagerContainer);
+  popupManagerRoot.render(
+    <React.StrictMode>
+      <PopupManager />
+    </React.StrictMode>,
+  );
+
   targets.forEach((target) => {
     if (!target) return;
 
@@ -56,24 +63,11 @@ export async function init() {
 
     // 3. Attach a click listener to trigger the React popup
     iconElement.addEventListener('click', () => {
-      // 4. Create a temporary container for our React app EVERY time the popup is opened
-      const popupContainer = document.createElement('div');
-      const popupRoot = ReactDOM.createRoot(popupContainer);
-
-      // 5. Render the MainPopup component into the container
-      popupRoot.render(
-        <React.StrictMode>
-          <Popup
-            content={<MainPopup />}
-            type={POPUP_TYPE.DISPLAY}
-            onComplete={() => popupRoot.unmount()}
-            options={{
-              large: true,
-              wide: true,
-            }}
-          />
-        </React.StrictMode>,
-      );
+      // @ts-ignore
+      if (window.openWorldInfoRecommenderPopup) {
+        // @ts-ignore
+        window.openWorldInfoRecommenderPopup();
+      }
     });
   });
 }
