@@ -1,6 +1,6 @@
 import { buildPrompt, BuildPromptOptions, ExtensionSettingsManager, Message } from 'sillytavern-utils-lib';
 import { ExtractedData } from 'sillytavern-utils-lib/types';
-import { getPrefilledXML, parseXMLOwn } from './xml.js';
+import { getFullXML, getPrefilledXML, parseXMLOwn } from './xml.js';
 import { WIEntry } from 'sillytavern-utils-lib/types/world-info';
 import { st_createWorldInfoEntry } from 'sillytavern-utils-lib/config';
 import { ExtensionSettings, MessageRole } from './settings.js';
@@ -33,7 +33,7 @@ export interface RunWorldInfoRecommendationParams {
     role: MessageRole;
   }[];
   maxResponseToken: number;
-  continueFrom?: { worldName: string; entry: WIEntry };
+  continueFrom?: { worldName: string; entry: WIEntry; mode: 'continue' | 'revise' };
 }
 
 export async function runWorldInfoRecommendation({
@@ -67,7 +67,15 @@ export async function runWorldInfoRecommendation({
   templateData['persona'] = '{{persona}}'; // ST going to replace this with the actual persona description
 
   templateData['blackListedEntries'] = session.blackListedEntries;
-  templateData['userInstructions'] = Handlebars.compile(userPrompt.trim(), { noEscape: true })(templateData);
+  const finalUserPrompt = userPrompt.trim();
+
+  // If we are revising, the main userInstructions in the system prompt will be empty.
+  // The actual instructions will be added as a separate user message later.
+  if (continueFrom && continueFrom.mode === 'revise') {
+    templateData['userInstructions'] = '';
+  } else {
+    templateData['userInstructions'] = Handlebars.compile(finalUserPrompt, { noEscape: true })(templateData);
+  }
 
   {
     const lorebooks: Record<string, WIEntry[]> = {};
@@ -124,12 +132,27 @@ export async function runWorldInfoRecommendation({
       }
     }
 
-    // If continuing add its content as last message
     if (continueFrom) {
-      messages.push({
-        role: 'assistant',
-        content: getPrefilledXML(continueFrom.worldName, continueFrom.entry),
-      });
+      if (continueFrom.mode === 'continue') {
+        // Add the incomplete XML to prompt for completion.
+        messages.push({
+          role: 'assistant',
+          content: getPrefilledXML(continueFrom.worldName, continueFrom.entry),
+        });
+      } else if (continueFrom.mode === 'revise') {
+        // Add the full XML of the existing entry as an assistant message.
+        messages.push({
+          role: 'assistant',
+          content: getFullXML(continueFrom.worldName, continueFrom.entry),
+        });
+        // Then, add the user's revision instructions as a new user message.
+        if (finalUserPrompt) {
+          messages.push({
+            role: 'user',
+            content: finalUserPrompt,
+          });
+        }
+      }
     }
   }
 
@@ -143,9 +166,13 @@ export async function runWorldInfoRecommendation({
 
   // console.log("Received content:", response.content);
 
+  const assistantMessageForContinue = messages.find((m) => m.role === 'assistant');
   let parsedEntries = parseXMLOwn(response.content, {
-    previousContent: continueFrom ? messages[messages.length - 1].content : undefined,
+    // Only merge with previous content if we are in 'continue' mode.
+    previousContent:
+      continueFrom && continueFrom.mode === 'continue' ? assistantMessageForContinue?.content : undefined,
   });
+
   if (Object.keys(parsedEntries).length === 0) {
     return {};
   }

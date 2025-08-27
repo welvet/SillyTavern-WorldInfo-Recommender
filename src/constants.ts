@@ -141,6 +141,7 @@ If you are updating an existing entry you should specify the id of the entry. Li
 
 export const DEFAULT_TASK_DESCRIPTION = `## Rules
 - Don't suggest already existing or suggested entries.
+{{#if userInstructions}}
 
 ## Your Task
-{{userInstructions}}`;
+{{userInstructions}}{{/if}}`;

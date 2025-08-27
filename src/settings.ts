@@ -12,7 +12,7 @@ import { st_echo } from 'sillytavern-utils-lib/config';
 
 export const extensionName = 'SillyTavern-WorldInfo-Recommender';
 export const VERSION = '0.1.5';
-export const FORMAT_VERSION = 'F_1.1';
+export const FORMAT_VERSION = 'F_1.2';
 
 export const KEYS = {
   EXTENSION: 'worldInfoRecommender',
@@ -262,6 +262,33 @@ export async function initializeSettings(): Promise<void> {
               delete migrated.usingDefaultLorebookRulesPrompt;
               delete migrated.responseRulesPrompt;
               delete migrated.usingDefaultResponseRulesPrompt;
+
+              return migrated;
+            },
+          },
+          {
+            from: 'F_1.1',
+            to: 'F_1.2',
+            action(previous) {
+              const migrated = { ...previous };
+              migrated.formatVersion = 'F_1.2';
+
+              // The exact string of the old default content for taskDescription
+              const OLD_TASK_DESCRIPTION = `## Rules
+- Don't suggest already existing or suggested entries.
+
+## Your Task
+{{userInstructions}}`;
+
+              // Check if the user's current setting is the old default.
+              if (migrated.prompts.taskDescription.content === OLD_TASK_DESCRIPTION) {
+                // If so, update it to the new default.
+                migrated.prompts.taskDescription.content = DEFAULT_PROMPT_CONTENTS.taskDescription;
+                migrated.prompts.taskDescription.isDefault = true;
+              } else {
+                // Otherwise, it's a custom prompt, so just mark it as not default.
+                migrated.prompts.taskDescription.isDefault = false;
+              }
 
               return migrated;
             },

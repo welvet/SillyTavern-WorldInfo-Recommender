@@ -212,10 +212,16 @@ export const MainPopup: FC = () => {
   );
 
   const handleGeneration = useCallback(
-    async (continueFrom?: { worldName: string; entry: WIEntry }) => {
+    async (continueFrom?: { worldName: string; entry: WIEntry; prompt: string; mode: 'continue' | 'revise' }) => {
       if (!settings.profileId) return st_echo('warning', 'Please select a connection profile.');
-      if (!settings.promptPresets[settings.promptPreset]?.content && !continueFrom)
+
+      // Determine the prompt: use the specific one from the entry if provided, otherwise use the global one.
+      const userPrompt = continueFrom?.prompt ?? settings.promptPresets[settings.promptPreset].content;
+
+      // For a global generation, the prompt must not be empty. For entry-specific actions, it can be.
+      if (!continueFrom && !userPrompt) {
         return st_echo('warning', 'Please enter a prompt.');
+      }
 
       setIsGenerating(true);
       try {
@@ -277,9 +283,13 @@ export const MainPopup: FC = () => {
           delete (promptSettings as any).suggestedLorebooks;
         if (session.blackListedEntries.length === 0) delete (promptSettings as any).blackListedEntries;
 
+        const continueFromPayload = continueFrom
+          ? { worldName: continueFrom.worldName, entry: continueFrom.entry, mode: continueFrom.mode }
+          : undefined;
+
         const resultingEntries = await runWorldInfoRecommendation({
           profileId: settings.profileId,
-          userPrompt: settings.promptPresets[settings.promptPreset].content,
+          userPrompt: userPrompt,
           buildPromptOptions,
           session,
           entriesGroupByWorldName,
@@ -288,7 +298,7 @@ export const MainPopup: FC = () => {
             .filter((p) => p.enabled)
             .map((p) => ({ promptName: p.promptName, role: p.role })),
           maxResponseToken: settings.maxResponseToken,
-          continueFrom,
+          continueFrom: continueFromPayload,
         });
 
         if (Object.keys(resultingEntries).length > 0) {

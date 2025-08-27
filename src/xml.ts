@@ -77,3 +77,16 @@ export function getPrefilledXML(worldName: string, entry: WIEntry): string {
     <triggers>${entry.key.join(',')}</triggers>
     <content>${entry.content}`;
 }
+
+export function getFullXML(worldName: string, entry: WIEntry): string {
+  return `
+<lorebooks>
+  <entry>
+    <worldName>${worldName}</worldName>
+    <id>${entry.uid}</id>
+    <name>${entry.comment}</name>
+    <triggers>${entry.key.join(',')}</triggers>
+    <content>${entry.content}</content>
+  </entry>
+</lorebooks>`;
+}

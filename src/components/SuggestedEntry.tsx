@@ -1,6 +1,6 @@
 import { FC, useState, useMemo, useRef } from 'react';
 import showdown from 'showdown';
-import { STButton, Popup } from 'sillytavern-utils-lib/components';
+import { STButton, Popup, STTextarea } from 'sillytavern-utils-lib/components';
 import { WIEntry } from 'sillytavern-utils-lib/types/world-info';
 import { RegexScriptData } from 'sillytavern-utils-lib/types/regex';
 import { POPUP_TYPE } from 'sillytavern-utils-lib/types/popup';
@@ -18,7 +18,12 @@ export interface SuggestedEntryProps {
   entriesGroupByWorldName: Record<string, WIEntry[]>;
   onAdd: (entry: WIEntry, initialWorldName: string, selectedTargetWorld: string) => void;
   onRemove: (entry: WIEntry, initialWorldName: string, isBlacklist: boolean) => void;
-  onContinue: (continueFrom: { worldName: string; entry: WIEntry }) => void;
+  onContinue: (continueFrom: {
+    worldName: string;
+    entry: WIEntry;
+    prompt: string;
+    mode: 'continue' | 'revise';
+  }) => void;
   onUpdate: (
     worldName: string,
     originalEntry: WIEntry,
@@ -49,8 +54,10 @@ export const SuggestedEntry: FC<SuggestedEntryProps> = ({
   });
   const [isAdding, setIsAdding] = useState(false);
   const [isContinuing, setIsContinuing] = useState(false);
+  const [isRevising, setIsRevising] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isComparing, setIsComparing] = useState(false);
+  const [updatePrompt, setUpdatePrompt] = useState('');
 
   // Create a ref to get access to the EditEntryPopup's imperative methods.
   const editPopupRef = useRef<EditEntryPopupRef>(null);
@@ -60,6 +67,8 @@ export const SuggestedEntry: FC<SuggestedEntryProps> = ({
     [selectedWorld, entry.uid, entry.comment, entriesGroupByWorldName],
   );
 
+  const isActing = isContinuing || isRevising;
+
   const handleAddClick = async () => {
     setIsAdding(true);
     await onAdd(entry, initialWorldName, selectedWorld);
@@ -67,8 +76,14 @@ export const SuggestedEntry: FC<SuggestedEntryProps> = ({
 
   const handleContinueClick = async () => {
     setIsContinuing(true);
-    await onContinue({ worldName: initialWorldName, entry });
+    await onContinue({ worldName: initialWorldName, entry, prompt: updatePrompt, mode: 'continue' });
     setIsContinuing(false);
+  };
+
+  const handleReviseClick = async () => {
+    setIsRevising(true);
+    await onContinue({ worldName: initialWorldName, entry, prompt: updatePrompt, mode: 'revise' });
+    setIsRevising(false);
   };
 
   return (
@@ -86,28 +101,47 @@ export const SuggestedEntry: FC<SuggestedEntryProps> = ({
               </option>
             ))}
           </select>
-          <STButton onClick={handleAddClick} disabled={isAdding} className="menu_button interactable add">
+          <STButton onClick={handleAddClick} disabled={isAdding || isActing} className="menu_button interactable add">
             {isUpdate ? 'Update' : 'Add'}
           </STButton>
-          <STButton onClick={handleContinueClick} disabled={isContinuing} className="menu_button interactable continue">
+          <STButton
+            onClick={handleContinueClick}
+            disabled={isActing}
+            className="menu_button interactable continue"
+            title="Continue writing this entry. You can provide instructions in the textbox below."
+          >
             {isContinuing ? '...' : 'Continue'}
           </STButton>
-          <STButton onClick={() => setIsEditing(true)} className="menu_button interactable edit">
+          <STButton
+            onClick={handleReviseClick}
+            disabled={isActing}
+            className="menu_button interactable revise"
+            title="Request changes to this entry. Provide instructions in the textbox below."
+          >
+            {isRevising ? '...' : 'Revise'}
+          </STButton>
+          <STButton onClick={() => setIsEditing(true)} disabled={isActing} className="menu_button interactable edit">
             Edit
           </STButton>
           {isUpdate && (
-            <STButton onClick={() => setIsComparing(true)} className="menu_button interactable compare">
+            <STButton
+              onClick={() => setIsComparing(true)}
+              disabled={isActing}
+              className="menu_button interactable compare"
+            >
               Compare
             </STButton>
           )}
           <STButton
             onClick={() => onRemove(entry, initialWorldName, true)}
+            disabled={isActing}
             className="menu_button interactable blacklist"
           >
             Blacklist
           </STButton>
           <STButton
             onClick={() => onRemove(entry, initialWorldName, false)}
+            disabled={isActing}
             className="menu_button interactable remove"
           >
             Remove
@@ -116,6 +150,15 @@ export const SuggestedEntry: FC<SuggestedEntryProps> = ({
         <h4 className="comment">{entry.comment}</h4>
         <div className="key">{entry.key.join(', ')}</div>
         <p className="content" dangerouslySetInnerHTML={{ __html: converter.makeHtml(entry.content ?? '') }}></p>
+        <div className="continue-prompt-section" style={{ marginTop: '10px' }}>
+          <STTextarea
+            value={updatePrompt}
+            onChange={(e) => setUpdatePrompt(e.target.value)}
+            placeholder="Optional instructions to continue or revise this entry. Then press 'Continue' or 'Revise'."
+            rows={2}
+            style={{ width: '100%' }}
+          />
+        </div>
       </div>
 
       {/* Conditionally render the Edit Popup */}
