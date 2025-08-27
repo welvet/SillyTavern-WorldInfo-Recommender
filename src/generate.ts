@@ -101,7 +101,7 @@ export async function runWorldInfoRecommendation({
     for (const mainContext of mainContextList) {
       // Chat history is exception, since it is not a template
       if (mainContext.promptName === 'chatHistory') {
-        messages.push(...((await buildPrompt(selectedApi, buildPromptOptions)).result));
+        messages.push(...(await buildPrompt(selectedApi, buildPromptOptions)).result);
         continue;
       }
 
