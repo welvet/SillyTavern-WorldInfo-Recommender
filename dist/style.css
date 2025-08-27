@@ -185,28 +185,10 @@ dialog:has(.compare-popup) {
 #worldInfoRecommenderPopup .actions .menu_button:hover {
   background-color: color-mix(in srgb, var(--active) 85%, white);
 }
-#worldInfoRecommenderPopup .actions .menu_button#worldInfoRecommend_reset {
-  background-color: var(--grey50);
-  margin-left: 8px;
-}
-#worldInfoRecommenderPopup .actions .menu_button#worldInfoRecommend_reset:hover {
-  background-color: var(--grey70);
-}
 #worldInfoRecommenderPopup .actions .menu_button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   pointer-events: none;
-}
-#worldInfoRecommenderPopup #worldInfoRecommend_maxTokens_container {
-  display: none;
-  margin-top: 10px;
-}
-#worldInfoRecommenderPopup #worldInfoRecommend_sendPrompt {
-  width: unset;
-}
-#worldInfoRecommenderPopup #worldInfoRecommend_promptPreset {
-  margin-bottom: 10px;
-  width: 100%;
 }
 #worldInfoRecommenderPopup button:disabled {
   opacity: 0.5;
