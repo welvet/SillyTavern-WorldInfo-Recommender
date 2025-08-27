@@ -89,7 +89,12 @@ export async function runWorldInfoRecommendation({
       .filter(([_, entries]) => entries.length > 0)
       .forEach(([worldName, entries]) => {
         lorebooks[worldName] = entries.filter(
-          (e) => !(worldName === continueFrom?.worldName && e.uid === continueFrom.entry.uid),
+          (e) =>
+            !(
+              worldName === continueFrom?.worldName &&
+              e.uid === continueFrom.entry.uid &&
+              e.comment === continueFrom.entry.comment
+            ),
         );
       });
 

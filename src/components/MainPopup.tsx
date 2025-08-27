@@ -27,6 +27,7 @@ import { RegexScriptData } from 'sillytavern-utils-lib/types/regex';
 import { SuggestedEntry } from './SuggestedEntry.js';
 // @ts-ignore
 import { Handlebars } from '../../../../../lib.js';
+import { useForceUpdate } from '../hooks/useForceUpdate.js';
 
 if (!Handlebars.helpers['join']) {
   Handlebars.registerHelper('join', function (array: any, separator: any) {
@@ -45,7 +46,8 @@ const getAvatar = () => (this_chid ? st_getCharaFilename(this_chid) : selected_g
  */
 export const MainPopup: FC = () => {
   // --- State Management ---
-  const [settings, setSettings] = useState<ExtensionSettings>(() => settingsManager.getSettings());
+  const forceUpdate = useForceUpdate();
+  const settings = settingsManager.getSettings();
   const [session, setSession] = useState<Session>({
     suggestedEntries: {},
     blackListedEntries: [],
@@ -146,26 +148,20 @@ export const MainPopup: FC = () => {
 
   // --- Generic Handlers ---
   const updateSetting = <K extends keyof ExtensionSettings>(key: K, value: ExtensionSettings[K]) => {
-    const newSettings = { ...settings, [key]: value };
-    setSettings(newSettings);
-    Object.assign(settingsManager.getSettings(), newSettings);
+    // Direct mutation + force update
+    settingsManager.getSettings()[key] = value;
     settingsManager.saveSettings();
+    forceUpdate();
   };
 
   const updateContextToSend = <K extends keyof ExtensionSettings['contextToSend']>(
     key: K,
     value: ExtensionSettings['contextToSend'][K],
   ) => {
-    const newSettings = {
-      ...settings,
-      contextToSend: {
-        ...settings.contextToSend,
-        [key]: value,
-      },
-    };
-    setSettings(newSettings);
-    Object.assign(settingsManager.getSettings(), newSettings);
+    // Direct mutation + force update
+    settingsManager.getSettings().contextToSend[key] = value;
     settingsManager.saveSettings();
+    forceUpdate();
   };
 
   // --- Memoized Derived Data for UI ---
@@ -296,19 +292,39 @@ export const MainPopup: FC = () => {
         });
 
         if (Object.keys(resultingEntries).length > 0) {
-          setSession((prev) => {
-            const newSuggested = structuredClone(prev.suggestedEntries);
-            for (const [worldName, entries] of Object.entries(resultingEntries)) {
-              if (!newSuggested[worldName]) newSuggested[worldName] = [];
-              // Avoid adding duplicates
-              for (const entry of entries) {
-                if (!newSuggested[worldName].some((e) => e.uid === entry.uid && e.comment === entry.comment)) {
-                  newSuggested[worldName].push(entry);
+          if (continueFrom) {
+            setSession((prev) => {
+              const newSuggested = structuredClone(prev.suggestedEntries);
+              const worldName = continueFrom.worldName;
+              const updatedEntry = resultingEntries[worldName]?.[0];
+
+              if (newSuggested[worldName] && updatedEntry) {
+                const entryIndex = newSuggested[worldName].findIndex(
+                  (e) => e.uid === continueFrom.entry.uid && e.comment === continueFrom.entry.comment,
+                );
+
+                if (entryIndex !== -1) {
+                  // Replace the old entry with the updated one
+                  newSuggested[worldName][entryIndex] = updatedEntry;
                 }
               }
-            }
-            return { ...prev, suggestedEntries: newSuggested };
-          });
+              return { ...prev, suggestedEntries: newSuggested };
+            });
+          } else {
+            setSession((prev) => {
+              const newSuggested = structuredClone(prev.suggestedEntries);
+              for (const [worldName, entries] of Object.entries(resultingEntries)) {
+                if (!newSuggested[worldName]) newSuggested[worldName] = [];
+                // Avoid adding duplicates
+                for (const entry of entries) {
+                  if (!newSuggested[worldName].some((e) => e.uid === entry.uid && e.comment === entry.comment)) {
+                    newSuggested[worldName].push(entry);
+                  }
+                }
+              }
+              return { ...prev, suggestedEntries: newSuggested };
+            });
+          }
         } else {
           st_echo('warning', 'No results from AI');
         }

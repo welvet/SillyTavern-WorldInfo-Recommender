@@ -56,8 +56,8 @@ export const SuggestedEntry: FC<SuggestedEntryProps> = ({
   const editPopupRef = useRef<EditEntryPopupRef>(null);
 
   const isUpdate = useMemo(
-    () => !!entriesGroupByWorldName[selectedWorld]?.find((e) => e.uid === entry.uid),
-    [selectedWorld, entry.uid, entriesGroupByWorldName],
+    () => !!entriesGroupByWorldName[selectedWorld]?.find((e) => e.uid === entry.uid && e.comment === entry.comment),
+    [selectedWorld, entry.uid, entry.comment, entriesGroupByWorldName],
   );
 
   const handleAddClick = async () => {

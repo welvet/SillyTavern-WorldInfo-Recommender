@@ -483,7 +483,9 @@ export function initializeCommands() {
             }
 
             for (const entry of entries) {
-              const isExisting = workingWorldInfo[targetWorldName]?.some((e) => e.uid === entry.uid);
+              const isExisting = workingWorldInfo[targetWorldName]?.some(
+                (e) => e.uid === entry.uid && e.comment === entry.comment,
+              );
 
               // Apply filters
               if (isExisting) {

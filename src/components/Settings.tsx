@@ -21,6 +21,7 @@ import {
   settingsManager,
   SYSTEM_PROMPT_KEYS,
 } from '../settings.js';
+import { useForceUpdate } from '../hooks/useForceUpdate.js';
 
 const globalContext = SillyTavern.getContext();
 
@@ -30,20 +31,19 @@ const globalContext = SillyTavern.getContext();
  */
 export const WorldInfoRecommenderSettings: FC = () => {
   // --- State Management ---
-  const [settings, setSettings] = useState<ExtensionSettings>(() => settingsManager.getSettings());
+  const forceUpdate = useForceUpdate();
+  const settings = settingsManager.getSettings();
   const [selectedSystemPrompt, setSelectedSystemPrompt] = useState<string>(SYSTEM_PROMPT_KEYS[0]);
 
   // Centralized function to update state and persist settings
-  const updateSettings = useCallback(
-    (newSettings: ExtensionSettings) => {
-      setSettings(newSettings);
-      // This is a bit of a hack to sync with the manager. A better approach
-      // would be for the manager to accept the new settings object directly.
-      // For now, we'll update key by key if needed.
-      Object.assign(settingsManager.getSettings(), newSettings);
+  const updateAndRefresh = useCallback(
+    (updater: (currentSettings: ExtensionSettings) => void) => {
+      const currentSettings = settingsManager.getSettings();
+      updater(currentSettings);
       settingsManager.saveSettings();
+      forceUpdate();
     },
-    [settingsManager],
+    [forceUpdate],
   );
 
   // --- Derived Data for UI (Memoized for performance) ---
@@ -90,84 +90,88 @@ export const WorldInfoRecommenderSettings: FC = () => {
 
   // --- Handlers for Main Context Template ---
   const handleMainContextPresetChange = (newValue?: string) => {
-    updateSettings({ ...settings, mainContextTemplatePreset: newValue ?? 'default' });
+    updateAndRefresh((s) => {
+      s.mainContextTemplatePreset = newValue ?? 'default';
+    });
   };
 
   const handleMainContextPresetsChange = (newItems: PresetItem[]) => {
-    const newPresets: Record<string, MainContextTemplatePreset> = {};
-    const oldPresets = settings.mainContextTemplatePresets;
-    const oldKeys = Object.keys(oldPresets);
-    const newKeys = newItems.map((item) => item.value);
+    updateAndRefresh((s) => {
+      const newPresets: Record<string, MainContextTemplatePreset> = {};
+      const oldPresets = s.mainContextTemplatePresets;
+      const oldKeys = Object.keys(oldPresets);
+      const newKeys = newItems.map((item) => item.value);
 
-    // Copy existing or cloned presets
-    for (const item of newItems) {
-      if (oldPresets[item.value]) {
-        newPresets[item.value] = oldPresets[item.value];
-      } else {
-        // This is a new item, clone the current or default
-        const currentPreset = oldPresets[settings.mainContextTemplatePreset] ?? oldPresets['default'];
-        newPresets[item.value] = structuredClone(currentPreset);
+      // Copy existing or cloned presets
+      for (const item of newItems) {
+        if (oldPresets[item.value]) {
+          newPresets[item.value] = oldPresets[item.value];
+        } else {
+          // This is a new item, clone the current or default
+          const currentPreset = oldPresets[s.mainContextTemplatePreset] ?? oldPresets['default'];
+          newPresets[item.value] = structuredClone(currentPreset);
+        }
       }
-    }
-
-    // Handle renames by finding the missing old key
-    if (newKeys.length === oldKeys.length && newKeys.length > 0) {
-      const renamedOldKey = oldKeys.find((k) => !newKeys.includes(k));
-      const renamedNewKey = newKeys.find((k) => !oldKeys.includes(k));
-      if (renamedOldKey && renamedNewKey) {
-        newPresets[renamedNewKey] = oldPresets[renamedOldKey];
+      // Handle renames by finding the missing old key
+      if (newKeys.length === oldKeys.length && newKeys.length > 0) {
+        const renamedOldKey = oldKeys.find((k) => !newKeys.includes(k));
+        const renamedNewKey = newKeys.find((k) => !oldKeys.includes(k));
+        if (renamedOldKey && renamedNewKey) {
+          newPresets[renamedNewKey] = oldPresets[renamedOldKey];
+        }
       }
-    }
-
-    updateSettings({ ...settings, mainContextTemplatePresets: newPresets });
+      s.mainContextTemplatePresets = newPresets;
+    });
   };
 
   const handleMainContextListChange = (newListItems: SortableListItemData[]) => {
-    const newPrompts: MainContextPromptBlock[] = newListItems.map((item) => ({
-      promptName: item.id,
-      enabled: item.enabled,
-      role: (item.selectValue as MessageRole) ?? 'user',
-    }));
-    const newSettings = structuredClone(settings);
-    newSettings.mainContextTemplatePresets[settings.mainContextTemplatePreset].prompts = newPrompts;
-    updateSettings(newSettings);
+    updateAndRefresh((s) => {
+      const newPrompts: MainContextPromptBlock[] = newListItems.map((item) => ({
+        promptName: item.id,
+        enabled: item.enabled,
+        role: (item.selectValue as MessageRole) ?? 'user',
+      }));
+      s.mainContextTemplatePresets[s.mainContextTemplatePreset].prompts = newPrompts;
+    });
   };
 
   const handleRestoreMainContextDefault = async () => {
     const confirm = await globalContext.Popup.show.confirm('Restore default', 'Are you sure?');
     if (!confirm) return;
 
-    const newSettings = structuredClone(settings);
-    newSettings.mainContextTemplatePresets['default'] = structuredClone(
-      DEFAULT_SETTINGS.mainContextTemplatePresets['default'],
-    );
-    newSettings.mainContextTemplatePreset = 'default';
-    updateSettings(newSettings);
+    updateAndRefresh((s) => {
+      s.mainContextTemplatePresets['default'] = structuredClone(DEFAULT_SETTINGS.mainContextTemplatePresets['default']);
+      s.mainContextTemplatePreset = 'default';
+    });
   };
 
   // --- Handlers for System Prompts ---
   const handleSystemPromptsChange = (newItems: PresetItem[]) => {
-    const newPrompts: Record<string, PromptSetting> = {};
-    const oldPrompts = settings.prompts;
-    const newSettings = structuredClone(settings);
+    updateAndRefresh((s) => {
+      const newPrompts: Record<string, PromptSetting> = {};
+      const oldPrompts = s.prompts;
 
-    // Handle deletions
-    const deletedKeys = Object.keys(oldPrompts).filter((key) => !newItems.some((item) => item.value === key));
-    for (const key of deletedKeys) {
-      // Remove from all main context presets
-      Object.values(newSettings.mainContextTemplatePresets).forEach((preset) => {
-        preset.prompts = preset.prompts.filter((p) => p.promptName !== key);
-      });
-    }
+      const oldKeys = Object.keys(oldPrompts);
+      const newKeys = newItems.map((item) => item.value);
 
-    // Rebuild prompts list
-    for (const item of newItems) {
-      newPrompts[item.value] = oldPrompts[item.value] ?? { content: '', isDefault: false, label: item.label };
-    }
+      // 1. Identify deleted prompts
+      const deletedKeys = oldKeys.filter((key) => !newKeys.includes(key));
+      if (deletedKeys.length > 0) {
+        // Remove deleted prompts from all main context presets
+        Object.values(s.mainContextTemplatePresets).forEach((preset) => {
+          preset.prompts = preset.prompts.filter((p) => !deletedKeys.includes(p.promptName));
+        });
+      }
 
-    // @ts-expect-error Type 'Record<string, PromptSetting>' is missing the following properties from type
-    newSettings.prompts = newPrompts;
-    updateSettings(newSettings);
+      // 2. Rebuild the prompts list from newItems
+      for (const item of newItems) {
+        // Preserve existing prompt data, or initialize a new one
+        newPrompts[item.value] = oldPrompts[item.value] ?? { content: '', isDefault: false, label: item.label };
+      }
+
+      // @ts-expect-error This is a partial update, which is fine
+      s.prompts = newPrompts;
+    });
   };
 
   const handleSystemPromptCreate = (value: string) => {
@@ -181,17 +185,16 @@ export const WorldInfoRecommenderSettings: FC = () => {
       return { confirmed: false };
     }
 
-    const newSettings = structuredClone(settings);
-    newSettings.prompts[variableName] = {
-      content: settings.prompts[selectedSystemPrompt]?.content ?? '',
-      isDefault: false,
-      label: value,
-    };
-    Object.values(newSettings.mainContextTemplatePresets).forEach((preset) => {
-      preset.prompts.push({ enabled: true, promptName: variableName, role: 'user' });
+    updateAndRefresh((s) => {
+      s.prompts[variableName] = {
+        content: s.prompts[selectedSystemPrompt]?.content ?? '',
+        isDefault: false,
+        label: value,
+      };
+      Object.values(s.mainContextTemplatePresets).forEach((preset) => {
+        preset.prompts.push({ enabled: true, promptName: variableName, role: 'user' });
+      });
     });
-
-    updateSettings(newSettings);
     setSelectedSystemPrompt(variableName);
     return { confirmed: true, value: variableName };
   };
@@ -207,36 +210,35 @@ export const WorldInfoRecommenderSettings: FC = () => {
       return { confirmed: false };
     }
 
-    const newSettings = structuredClone(settings);
-    newSettings.prompts[variableName] = { ...newSettings.prompts[oldValue], label: newValue };
-    delete newSettings.prompts[oldValue];
+    updateAndRefresh((s) => {
+      s.prompts[variableName] = { ...s.prompts[oldValue], label: newValue };
+      delete s.prompts[oldValue];
 
-    Object.values(newSettings.mainContextTemplatePresets).forEach((preset) => {
-      preset.prompts.forEach((p) => {
-        if (p.promptName === oldValue) {
-          p.promptName = variableName;
-        }
+      Object.values(s.mainContextTemplatePresets).forEach((preset) => {
+        preset.prompts.forEach((p) => {
+          if (p.promptName === oldValue) {
+            p.promptName = variableName;
+          }
+        });
       });
     });
-
-    updateSettings(newSettings);
     setSelectedSystemPrompt(variableName);
     return { confirmed: true, value: variableName };
   };
 
   const handleSystemPromptContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newContent = e.target.value;
-    const newSettings = structuredClone(settings);
-    const prompt = newSettings.prompts[selectedSystemPrompt];
-    if (prompt) {
-      prompt.content = newContent;
-      // @ts-ignore
-      prompt.isDefault = SYSTEM_PROMPT_KEYS.includes(selectedSystemPrompt)
-        ? // @ts-ignore
-          DEFAULT_PROMPT_CONTENTS[selectedSystemPrompt] === newContent
-        : false;
-      updateSettings(newSettings);
-    }
+    updateAndRefresh((s) => {
+      const prompt = s.prompts[selectedSystemPrompt];
+      if (prompt) {
+        prompt.content = newContent;
+        // @ts-ignore
+        prompt.isDefault = SYSTEM_PROMPT_KEYS.includes(selectedSystemPrompt)
+          ? // @ts-ignore
+            DEFAULT_PROMPT_CONTENTS[selectedSystemPrompt] === newContent
+          : false;
+      }
+    });
   };
 
   const handleRestoreSystemPromptDefault = async () => {
@@ -245,10 +247,10 @@ export const WorldInfoRecommenderSettings: FC = () => {
 
     const confirm = await globalContext.Popup.show.confirm('Restore Default', `Restore default for "${prompt.label}"?`);
     if (confirm) {
-      const newSettings = structuredClone(settings);
-      // @ts-ignore
-      newSettings.prompts[selectedSystemPrompt].content = DEFAULT_PROMPT_CONTENTS[selectedSystemPrompt];
-      updateSettings(newSettings);
+      updateAndRefresh((s) => {
+        // @ts-ignore
+        s.prompts[selectedSystemPrompt].content = DEFAULT_PROMPT_CONTENTS[selectedSystemPrompt];
+      });
     }
   };
 
@@ -256,12 +258,9 @@ export const WorldInfoRecommenderSettings: FC = () => {
   const handleResetEverything = async () => {
     const confirm = await globalContext.Popup.show.confirm('Reset Everything', 'Are you sure? This cannot be undone.');
     if (confirm) {
-      settingsManager.resetSettings();
-      setTimeout(() => {
-        st_echo('success', 'Settings reset. Please reload the page.');
-        // Optionally, force a state reset to the new defaults without a reload
-        setSettings(structuredClone(DEFAULT_SETTINGS));
-      }, 1500);
+      settingsManager.resetSettings(); // This saves automatically
+      forceUpdate();
+      st_echo('success', 'Settings reset. The UI has been updated.');
     }
   };
 
