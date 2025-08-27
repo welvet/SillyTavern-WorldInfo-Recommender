@@ -25,6 +25,14 @@ import { ExtensionSettings, settingsManager } from '../settings.js';
 import { Character } from 'sillytavern-utils-lib/types';
 import { RegexScriptData } from 'sillytavern-utils-lib/types/regex';
 import { SuggestedEntry } from './SuggestedEntry.js';
+// @ts-ignore
+import { Handlebars } from '../../../../../lib.js';
+
+if (!Handlebars.helpers['join']) {
+  Handlebars.registerHelper('join', function (array: any, separator: any) {
+    return array.join(separator);
+  });
+}
 
 const globalContext = SillyTavern.getContext();
 
@@ -479,97 +487,106 @@ export const MainPopup: FC = () => {
                 Description of SillyTavern and Lorebook
               </label>
               {/* Message Options */}
-              <div className="message-options">
-                <h4>Messages to Include</h4>
-                <select
-                  className="text_pole"
-                  value={settings.contextToSend.messages.type}
-                  onChange={(e) =>
-                    updateContextToSend('messages', { ...settings.contextToSend.messages, type: e.target.value as any })
-                  }
-                >
-                  <option value="none">None</option>
-                  <option value="all">All Messages</option>
-                  <option value="first">First X Messages</option>
-                  <option value="last">Last X Messages</option>
-                  <option value="range">Range</option>
-                </select>
+              {avatarKey != '_global' && (
+                <div className="message-options">
+                  <h4>Messages to Include</h4>
+                  <select
+                    className="text_pole"
+                    value={settings.contextToSend.messages.type}
+                    onChange={(e) =>
+                      updateContextToSend('messages', {
+                        ...settings.contextToSend.messages,
+                        type: e.target.value as any,
+                      })
+                    }
+                  >
+                    <option value="none">None</option>
+                    <option value="all">All Messages</option>
+                    <option value="first">First X Messages</option>
+                    <option value="last">Last X Messages</option>
+                    <option value="range">Range</option>
+                  </select>
 
-                {settings.contextToSend.messages.type === 'first' && (
-                  <div style={{ marginTop: '10px' }}>
-                    <label>
-                      First{' '}
-                      <input
-                        type="number"
-                        className="text_pole small message-input"
-                        min="1"
-                        value={settings.contextToSend.messages.first ?? 10}
-                        onChange={(e) =>
-                          updateContextToSend('messages', {
-                            ...settings.contextToSend.messages,
-                            first: parseInt(e.target.value) || 10,
-                          })
-                        }
-                      />{' '}
-                      Messages
-                    </label>
-                  </div>
-                )}
-                {settings.contextToSend.messages.type === 'last' && (
-                  <div style={{ marginTop: '10px' }}>
-                    <label>
-                      Last{' '}
-                      <input
-                        type="number"
-                        className="text_pole small message-input"
-                        min="1"
-                        value={settings.contextToSend.messages.last ?? 10}
-                        onChange={(e) =>
-                          updateContextToSend('messages', {
-                            ...settings.contextToSend.messages,
-                            last: parseInt(e.target.value) || 10,
-                          })
-                        }
-                      />{' '}
-                      Messages
-                    </label>
-                  </div>
-                )}
-                {settings.contextToSend.messages.type === 'range' && (
-                  <div style={{ marginTop: '10px' }}>
-                    <label>
-                      Range:{' '}
-                      <input
-                        type="number"
-                        className="text_pole small message-input"
-                        min="0"
-                        placeholder="Start"
-                        value={settings.contextToSend.messages.range?.start ?? 0}
-                        onChange={(e) =>
-                          updateContextToSend('messages', {
-                            ...settings.contextToSend.messages,
-                            range: { ...settings.contextToSend.messages.range!, start: parseInt(e.target.value) || 0 },
-                          })
-                        }
-                      />{' '}
-                      to{' '}
-                      <input
-                        type="number"
-                        className="text_pole small message-input"
-                        min="1"
-                        placeholder="End"
-                        value={settings.contextToSend.messages.range?.end ?? 10}
-                        onChange={(e) =>
-                          updateContextToSend('messages', {
-                            ...settings.contextToSend.messages,
-                            range: { ...settings.contextToSend.messages.range!, end: parseInt(e.target.value) || 10 },
-                          })
-                        }
-                      />
-                    </label>
-                  </div>
-                )}
-              </div>
+                  {settings.contextToSend.messages.type === 'first' && (
+                    <div style={{ marginTop: '10px' }}>
+                      <label>
+                        First{' '}
+                        <input
+                          type="number"
+                          className="text_pole small message-input"
+                          min="1"
+                          value={settings.contextToSend.messages.first ?? 10}
+                          onChange={(e) =>
+                            updateContextToSend('messages', {
+                              ...settings.contextToSend.messages,
+                              first: parseInt(e.target.value) || 10,
+                            })
+                          }
+                        />{' '}
+                        Messages
+                      </label>
+                    </div>
+                  )}
+                  {settings.contextToSend.messages.type === 'last' && (
+                    <div style={{ marginTop: '10px' }}>
+                      <label>
+                        Last{' '}
+                        <input
+                          type="number"
+                          className="text_pole small message-input"
+                          min="1"
+                          value={settings.contextToSend.messages.last ?? 10}
+                          onChange={(e) =>
+                            updateContextToSend('messages', {
+                              ...settings.contextToSend.messages,
+                              last: parseInt(e.target.value) || 10,
+                            })
+                          }
+                        />{' '}
+                        Messages
+                      </label>
+                    </div>
+                  )}
+                  {settings.contextToSend.messages.type === 'range' && (
+                    <div style={{ marginTop: '10px' }}>
+                      <label>
+                        Range:{' '}
+                        <input
+                          type="number"
+                          className="text_pole small message-input"
+                          min="0"
+                          placeholder="Start"
+                          value={settings.contextToSend.messages.range?.start ?? 0}
+                          onChange={(e) =>
+                            updateContextToSend('messages', {
+                              ...settings.contextToSend.messages,
+                              range: {
+                                ...settings.contextToSend.messages.range!,
+                                start: parseInt(e.target.value) || 0,
+                              },
+                            })
+                          }
+                        />{' '}
+                        to{' '}
+                        <input
+                          type="number"
+                          className="text_pole small message-input"
+                          min="1"
+                          placeholder="End"
+                          value={settings.contextToSend.messages.range?.end ?? 10}
+                          onChange={(e) =>
+                            updateContextToSend('messages', {
+                              ...settings.contextToSend.messages,
+                              range: { ...settings.contextToSend.messages.range!, end: parseInt(e.target.value) || 10 },
+                            })
+                          }
+                        />
+                      </label>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <label className="checkbox_label">
                 <input
                   type="checkbox"
