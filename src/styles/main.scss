@@ -204,15 +204,6 @@ dialog:has(.compare-popup) {
                 background-color: color-mix(in srgb, var(--active) 85%, white);
             }
 
-            &#worldInfoRecommend_reset {
-                background-color: var(--grey50);
-                margin-left: 8px;
-
-                &:hover {
-                    background-color: var(--grey70);
-                }
-            }
-
             &:disabled {
                 opacity: 0.5;
                 cursor: not-allowed;
@@ -220,20 +211,6 @@ dialog:has(.compare-popup) {
             }
         }
     }
-
-    #worldInfoRecommend_maxTokens_container {
-        display: none;
-        margin-top: 10px;
-    }
-
-    #worldInfoRecommend_sendPrompt {
-        width: unset;
-    }
-
-    #worldInfoRecommend_promptPreset {
-        margin-bottom: 10px;
-        width: 100%;
-      }
 
     button:disabled {
         opacity: 0.5;

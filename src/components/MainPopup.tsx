@@ -579,7 +579,7 @@ export const MainPopup: FC = () => {
                 Char Card
               </label>
               {groupMembers.length > 0 && (
-                <div id="worldInfoRecommend_charCardContainer">
+                <div>
                   <h4>Select Character</h4>
                   <select className="text_pole" title="Select character for your group.">
                     {groupMembers.map((member) => (
@@ -732,7 +732,7 @@ export const MainPopup: FC = () => {
                 Reset
               </STButton>
             </div>
-            <div id="worldInfoRecommend_suggestedEntries">
+            <div>
               {suggestedEntriesList.length === 0 && <p>No suggestions yet. Send a prompt to get started!</p>}
               {suggestedEntriesList.map(({ worldName, entry }) => (
                 <SuggestedEntry

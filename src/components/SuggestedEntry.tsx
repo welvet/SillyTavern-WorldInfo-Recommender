@@ -73,7 +73,7 @@ export const SuggestedEntry: FC<SuggestedEntryProps> = ({
 
   return (
     <>
-      <div className="entry" data-id={entry.uid} data-world-name={initialWorldName}>
+      <div className="entry">
         <div className="menu">
           <select
             className="world-select text_pole"
