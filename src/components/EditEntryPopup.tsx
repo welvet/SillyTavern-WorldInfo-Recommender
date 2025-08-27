@@ -106,7 +106,7 @@ export const EditEntryPopup = forwardRef<EditEntryPopupRef, EditEntryPopupProps>
       }
     }
     setContent(simulatedContent);
-  }, [regexListItems, allRegexes, entry.content]);
+  }, [regexListItems, allRegexes, content]);
 
   const handleRegexSelectionChange = (newIds: string[]) => {
     const newItems = newIds

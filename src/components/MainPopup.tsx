@@ -1,5 +1,4 @@
 import { FC, useState, useEffect, useCallback, useMemo } from 'react';
-import showdown from 'showdown';
 import {
   STButton,
   STConnectionProfileSelect,
@@ -28,7 +27,6 @@ import { RegexScriptData } from 'sillytavern-utils-lib/types/regex';
 import { SuggestedEntry } from './SuggestedEntry.js';
 
 const globalContext = SillyTavern.getContext();
-const converter = new showdown.Converter();
 
 // Helper to get current character/group avatar filename
 const getAvatar = () => (this_chid ? st_getCharaFilename(this_chid) : selected_group);
@@ -51,14 +49,19 @@ export const MainPopup: FC = () => {
   const [groupMembers, setGroupMembers] = useState<Character[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [lastAddedWorldName, setLastAddedWorldName] = useState<string | null>(null);
+
+  const avatarKey = useMemo(() => getAvatar() ?? '_global', [this_chid, selected_group]);
 
   // --- Data Loading Effect ---
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true);
+      setEntriesGroupByWorldName({});
+      setAllWorldNames([]);
+      setGroupMembers([]);
+
       const avatar = getAvatar();
-      const key = `worldInfoRecommend_${avatar ?? '_global'}`;
+      const key = `worldInfoRecommend_${avatarKey}`;
 
       // Load session from localStorage
       const savedSession: Partial<Session> = JSON.parse(localStorage.getItem(key) ?? '{}');
@@ -100,14 +103,14 @@ export const MainPopup: FC = () => {
       setAllWorldNames(loadedWorldNames);
 
       // Sync session's selected worlds with available worlds
-      if (initialSession.selectedWorldNames.length === 0 && avatar) {
+      if (initialSession.selectedWorldNames.length === 0 && avatarKey !== '_global') {
         initialSession.selectedWorldNames = [...loadedWorldNames];
       } else {
         initialSession.selectedWorldNames = initialSession.selectedWorldNames.filter((name) =>
           loadedWorldNames.includes(name),
         );
       }
-      setSession(initialSession);
+      setSession(initialSession); // Set the fully loaded and synced session
 
       // Load group members for char card selection if in group chat
       if (selected_group) {
@@ -124,14 +127,14 @@ export const MainPopup: FC = () => {
     };
 
     loadData();
-  }, []);
+  }, [avatarKey]);
 
   // --- Session Saving Effect ---
   useEffect(() => {
-    const avatar = getAvatar();
-    const key = `worldInfoRecommend_${avatar ?? '_global'}`;
+    if (isLoading) return;
+    const key = `worldInfoRecommend_${avatarKey}`;
     localStorage.setItem(key, JSON.stringify(session));
-  }, [session]);
+  }, [session, avatarKey, isLoading]);
 
   // --- Generic Handlers ---
   const updateSetting = <K extends keyof ExtensionSettings>(key: K, value: ExtensionSettings[K]) => {
@@ -192,7 +195,6 @@ export const MainPopup: FC = () => {
 
       Object.assign(targetEntry, { key: entry.key, content: entry.content, comment: entry.comment });
       setEntriesGroupByWorldName(worldInfoCopy);
-      setLastAddedWorldName(selectedWorldName);
 
       if (!skipSave) {
         const finalFormat = { entries: Object.fromEntries(worldInfoCopy[selectedWorldName].map((e) => [e.uid, e])) };
