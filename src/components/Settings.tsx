@@ -99,27 +99,10 @@ export const WorldInfoRecommenderSettings: FC = () => {
     updateAndRefresh((s) => {
       const newPresets: Record<string, MainContextTemplatePreset> = {};
       const oldPresets = s.mainContextTemplatePresets;
-      const oldKeys = Object.keys(oldPresets);
-      const newKeys = newItems.map((item) => item.value);
-
-      // Copy existing or cloned presets
-      for (const item of newItems) {
-        if (oldPresets[item.value]) {
-          newPresets[item.value] = oldPresets[item.value];
-        } else {
-          // This is a new item, clone the current or default
-          const currentPreset = oldPresets[s.mainContextTemplatePreset] ?? oldPresets['default'];
-          newPresets[item.value] = structuredClone(currentPreset);
-        }
-      }
-      // Handle renames by finding the missing old key
-      if (newKeys.length === oldKeys.length && newKeys.length > 0) {
-        const renamedOldKey = oldKeys.find((k) => !newKeys.includes(k));
-        const renamedNewKey = newKeys.find((k) => !oldKeys.includes(k));
-        if (renamedOldKey && renamedNewKey) {
-          newPresets[renamedNewKey] = oldPresets[renamedOldKey];
-        }
-      }
+      newItems.forEach((item) => {
+        newPresets[item.value] =
+          oldPresets[item.value] ?? structuredClone(oldPresets[s.mainContextTemplatePreset] ?? oldPresets['default']);
+      });
       s.mainContextTemplatePresets = newPresets;
     });
   };
@@ -131,7 +114,18 @@ export const WorldInfoRecommenderSettings: FC = () => {
         enabled: item.enabled,
         role: (item.selectValue as MessageRole) ?? 'user',
       }));
-      s.mainContextTemplatePresets[s.mainContextTemplatePreset].prompts = newPrompts;
+
+      //  Create a new preset object and a new presets object
+      // instead of mutating the existing one. This ensures useMemo detects the change.
+      const updatedPreset = {
+        ...s.mainContextTemplatePresets[s.mainContextTemplatePreset],
+        prompts: newPrompts,
+      };
+
+      s.mainContextTemplatePresets = {
+        ...s.mainContextTemplatePresets,
+        [s.mainContextTemplatePreset]: updatedPreset,
+      };
     });
   };
 
@@ -140,7 +134,11 @@ export const WorldInfoRecommenderSettings: FC = () => {
     if (!confirm) return;
 
     updateAndRefresh((s) => {
-      s.mainContextTemplatePresets['default'] = structuredClone(DEFAULT_SETTINGS.mainContextTemplatePresets['default']);
+      // Create a new presets object instead of mutating a property on the old one.
+      s.mainContextTemplatePresets = {
+        ...s.mainContextTemplatePresets,
+        default: structuredClone(DEFAULT_SETTINGS.mainContextTemplatePresets['default']),
+      };
       s.mainContextTemplatePreset = 'default';
     });
   };
@@ -150,27 +148,32 @@ export const WorldInfoRecommenderSettings: FC = () => {
     updateAndRefresh((s) => {
       const newPrompts: Record<string, PromptSetting> = {};
       const oldPrompts = s.prompts;
-
       const oldKeys = Object.keys(oldPrompts);
       const newKeys = newItems.map((item) => item.value);
 
-      // 1. Identify deleted prompts
+      // Rebuild the prompts list from newItems
+      newKeys.forEach((key) => {
+        newPrompts[key] = oldPrompts[key] ?? { content: '', isDefault: false, label: key };
+      });
+
+      // @ts-ignore
+      s.prompts = newPrompts; // This part is correct and immutable.
+
+      // Identify deleted prompts
       const deletedKeys = oldKeys.filter((key) => !newKeys.includes(key));
       if (deletedKeys.length > 0) {
-        // Remove deleted prompts from all main context presets
-        Object.values(s.mainContextTemplatePresets).forEach((preset) => {
-          preset.prompts = preset.prompts.filter((p) => !deletedKeys.includes(p.promptName));
-        });
+        //  Create a new main context presets object with updated prompt arrays.
+        const updatedPresets = Object.fromEntries(
+          Object.entries(s.mainContextTemplatePresets).map(([presetName, preset]) => [
+            presetName,
+            {
+              ...preset,
+              prompts: preset.prompts.filter((p) => !deletedKeys.includes(p.promptName)),
+            },
+          ]),
+        );
+        s.mainContextTemplatePresets = updatedPresets;
       }
-
-      // 2. Rebuild the prompts list from newItems
-      for (const item of newItems) {
-        // Preserve existing prompt data, or initialize a new one
-        newPrompts[item.value] = oldPrompts[item.value] ?? { content: '', isDefault: false, label: item.label };
-      }
-
-      // @ts-expect-error This is a partial update, which is fine
-      s.prompts = newPrompts;
     });
   };
 
@@ -186,14 +189,26 @@ export const WorldInfoRecommenderSettings: FC = () => {
     }
 
     updateAndRefresh((s) => {
-      s.prompts[variableName] = {
-        content: s.prompts[selectedSystemPrompt]?.content ?? '',
-        isDefault: false,
-        label: value,
+      // Create a new prompts object.
+      s.prompts = {
+        ...s.prompts,
+        [variableName]: {
+          content: s.prompts[selectedSystemPrompt]?.content ?? '',
+          isDefault: false,
+          label: value,
+        },
       };
-      Object.values(s.mainContextTemplatePresets).forEach((preset) => {
-        preset.prompts.push({ enabled: true, promptName: variableName, role: 'user' });
-      });
+
+      // Create a new presets object where each preset has a new, updated prompts array.
+      s.mainContextTemplatePresets = Object.fromEntries(
+        Object.entries(s.mainContextTemplatePresets).map(([presetName, preset]) => [
+          presetName,
+          {
+            ...preset,
+            prompts: [...preset.prompts, { enabled: true, promptName: variableName, role: 'user' }],
+          },
+        ]),
+      );
     });
     setSelectedSystemPrompt(variableName);
     return { confirmed: true, value: variableName };
@@ -211,16 +226,24 @@ export const WorldInfoRecommenderSettings: FC = () => {
     }
 
     updateAndRefresh((s) => {
-      s.prompts[variableName] = { ...s.prompts[oldValue], label: newValue };
-      delete s.prompts[oldValue];
+      // Create a new prompts object by removing the old key and adding the new one.
+      const { [oldValue]: renamedPrompt, ...restPrompts } = s.prompts;
+      // @ts-ignore
+      s.prompts = {
+        ...restPrompts,
+        [variableName]: { ...renamedPrompt, label: newValue },
+      };
 
-      Object.values(s.mainContextTemplatePresets).forEach((preset) => {
-        preset.prompts.forEach((p) => {
-          if (p.promptName === oldValue) {
-            p.promptName = variableName;
-          }
-        });
-      });
+      // Create a new presets object with updated prompt names.
+      s.mainContextTemplatePresets = Object.fromEntries(
+        Object.entries(s.mainContextTemplatePresets).map(([presetName, preset]) => [
+          presetName,
+          {
+            ...preset,
+            prompts: preset.prompts.map((p) => (p.promptName === oldValue ? { ...p, promptName: variableName } : p)),
+          },
+        ]),
+      );
     });
     setSelectedSystemPrompt(variableName);
     return { confirmed: true, value: variableName };
@@ -231,12 +254,17 @@ export const WorldInfoRecommenderSettings: FC = () => {
     updateAndRefresh((s) => {
       const prompt = s.prompts[selectedSystemPrompt];
       if (prompt) {
-        prompt.content = newContent;
-        // @ts-ignore
-        prompt.isDefault = SYSTEM_PROMPT_KEYS.includes(selectedSystemPrompt)
-          ? // @ts-ignore
-            DEFAULT_PROMPT_CONTENTS[selectedSystemPrompt] === newContent
-          : false;
+        // Create a new prompts object with an updated prompt object.
+        s.prompts = {
+          ...s.prompts,
+          [selectedSystemPrompt]: {
+            ...prompt,
+            content: newContent,
+            isDefault: SYSTEM_PROMPT_KEYS.includes(selectedSystemPrompt as any)
+              ? DEFAULT_PROMPT_CONTENTS[selectedSystemPrompt as keyof typeof DEFAULT_PROMPT_CONTENTS] === newContent
+              : false,
+          },
+        };
       }
     });
   };
@@ -248,8 +276,14 @@ export const WorldInfoRecommenderSettings: FC = () => {
     const confirm = await globalContext.Popup.show.confirm('Restore Default', `Restore default for "${prompt.label}"?`);
     if (confirm) {
       updateAndRefresh((s) => {
-        // @ts-ignore
-        s.prompts[selectedSystemPrompt].content = DEFAULT_PROMPT_CONTENTS[selectedSystemPrompt];
+        // Create a new prompts object with the restored content.
+        s.prompts = {
+          ...s.prompts,
+          [selectedSystemPrompt]: {
+            ...s.prompts[selectedSystemPrompt],
+            content: DEFAULT_PROMPT_CONTENTS[selectedSystemPrompt as keyof typeof DEFAULT_PROMPT_CONTENTS],
+          },
+        };
       });
     }
   };
@@ -259,6 +293,7 @@ export const WorldInfoRecommenderSettings: FC = () => {
     const confirm = await globalContext.Popup.show.confirm('Reset Everything', 'Are you sure? This cannot be undone.');
     if (confirm) {
       settingsManager.resetSettings(); // This saves automatically
+      // forceUpdate is sufficient here because the next render will get a completely new settings object.
       forceUpdate();
       st_echo('success', 'Settings reset. The UI has been updated.');
     }
