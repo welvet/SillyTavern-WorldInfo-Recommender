@@ -12,6 +12,7 @@
 
 .popup-content:has(.edit-popup) {
   overflow: visible;
+  overflow-y: auto;
 }
 
 .popup-body:has(.edit-popup) {
