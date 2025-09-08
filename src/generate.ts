@@ -15,6 +15,7 @@ export interface Session {
   suggestedEntries: Record<string, WIEntry[]>;
   blackListedEntries: string[];
   selectedWorldNames: string[];
+  selectedEntryUids: Record<string, number[]>;
   regexIds: Record<string, Partial<RegexScriptData>>;
 }
 
@@ -85,7 +86,18 @@ export async function runWorldInfoRecommendation({
           entries.length > 0 && session.selectedWorldNames.includes(worldName) && entries.some((e) => !e.disable),
       )
       .forEach(([worldName, entries]) => {
-        lorebooks[worldName] = entries.filter((e) => !e.disable);
+        let filteredEntries = entries.filter((e) => !e.disable);
+
+        const selectedUidsForWorld = session.selectedEntryUids?.[worldName];
+        // If there's a selection for this specific world and it's not empty, filter by it.
+        if (selectedUidsForWorld && selectedUidsForWorld.length > 0) {
+          const selectedUids = new Set(selectedUidsForWorld);
+          filteredEntries = filteredEntries.filter((e) => selectedUids.has(e.uid));
+        }
+
+        if (filteredEntries.length > 0) {
+          lorebooks[worldName] = filteredEntries;
+        }
       });
 
     templateData['currentLorebooks'] = lorebooks;

@@ -1,4 +1,4 @@
-import { FC, useState, useEffect, useCallback, useMemo } from 'react';
+import { FC, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   STButton,
   STConnectionProfileSelect,
@@ -7,6 +7,7 @@ import {
   STTextarea,
   PresetItem,
   DropdownItem as FancyDropdownItem,
+  Popup,
 } from 'sillytavern-utils-lib/components';
 import { BuildPromptOptions, getActiveWorldInfo } from 'sillytavern-utils-lib';
 import {
@@ -28,6 +29,8 @@ import { SuggestedEntry } from './SuggestedEntry.js';
 // @ts-ignore
 import { Handlebars } from '../../../../../lib.js';
 import { useForceUpdate } from '../hooks/useForceUpdate.js';
+import { SelectEntriesPopup, SelectEntriesPopupRef } from './SelectEntriesPopup.js';
+import { POPUP_TYPE } from 'sillytavern-utils-lib/types/popup';
 
 if (!Handlebars.helpers['join']) {
   Handlebars.registerHelper('join', function (array: any, separator: any) {
@@ -52,6 +55,7 @@ export const MainPopup: FC = () => {
     suggestedEntries: {},
     blackListedEntries: [],
     selectedWorldNames: [],
+    selectedEntryUids: {},
     regexIds: {},
   });
   const [allWorldNames, setAllWorldNames] = useState<string[]>([]);
@@ -59,6 +63,9 @@ export const MainPopup: FC = () => {
   const [groupMembers, setGroupMembers] = useState<Character[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSelectingEntries, setIsSelectingEntries] = useState(false);
+
+  const selectEntriesPopupRef = useRef<SelectEntriesPopupRef>(null);
 
   const avatarKey = useMemo(() => getAvatar() ?? '_global', [this_chid, selected_group]);
 
@@ -79,6 +86,7 @@ export const MainPopup: FC = () => {
         suggestedEntries: savedSession.suggestedEntries ?? {},
         blackListedEntries: savedSession.blackListedEntries ?? [],
         selectedWorldNames: savedSession.selectedWorldNames ?? [],
+        selectedEntryUids: savedSession.selectedEntryUids ?? {},
         regexIds: savedSession.regexIds ?? {},
       };
 
@@ -120,6 +128,21 @@ export const MainPopup: FC = () => {
           loadedWorldNames.includes(name),
         );
       }
+
+      // Sync session's selected entry UIDs with available entries
+      const validEntryUids: Record<string, number[]> = {};
+      if (initialSession.selectedEntryUids) {
+        for (const [worldName, uids] of Object.entries(initialSession.selectedEntryUids)) {
+          if (loadedEntries[worldName]) {
+            const worldEntryUids = new Set(loadedEntries[worldName].map((e) => e.uid));
+            const validUids = uids.filter((uid) => worldEntryUids.has(uid));
+            if (validUids.length > 0) {
+              validEntryUids[worldName] = validUids;
+            }
+          }
+        }
+      }
+      initialSession.selectedEntryUids = validEntryUids;
       setSession(initialSession); // Set the fully loaded and synced session
 
       // Load group members for char card selection if in group chat
@@ -173,6 +196,11 @@ export const MainPopup: FC = () => {
   const worldInfoDropdownItems = useMemo(
     (): FancyDropdownItem[] => allWorldNames.map((name) => ({ value: name, label: name })),
     [allWorldNames],
+  );
+
+  const totalSelectedEntries = useMemo(
+    () => Object.values(session.selectedEntryUids).reduce((sum, uids) => sum + uids.length, 0),
+    [session.selectedEntryUids],
   );
 
   // --- Core Logic Callbacks ---
@@ -432,6 +460,7 @@ export const MainPopup: FC = () => {
         suggestedEntries: {},
         blackListedEntries: [],
         selectedWorldNames: getAvatar() ? [...allWorldNames] : [],
+        selectedEntryUids: {},
       }));
       st_echo('success', 'Reset successful');
     }
@@ -477,6 +506,16 @@ export const MainPopup: FC = () => {
     });
   };
 
+  const entriesForSelectionPopup = useMemo(() => {
+    const result: Record<string, WIEntry[]> = {};
+    session.selectedWorldNames.forEach((worldName) => {
+      if (entriesGroupByWorldName[worldName]) {
+        result[worldName] = entriesGroupByWorldName[worldName];
+      }
+    });
+    return result;
+  }, [session.selectedWorldNames, entriesGroupByWorldName]);
+
   // --- Render ---
   if (isLoading) {
     return <div>Loading...</div>;
@@ -487,315 +526,362 @@ export const MainPopup: FC = () => {
   );
 
   return (
-    <div id="worldInfoRecommenderPopup">
-      <h2>World Info Recommender</h2>
-      <div className="container">
-        {/* Left Column */}
-        <div className="column">
-          <div className="card">
-            <h3>Connection Profile</h3>
-            <STConnectionProfileSelect
-              initialSelectedProfileId={settings.profileId}
-              // @ts-ignore
-              onChange={(profile) => updateSetting('profileId', profile?.id)}
-            />
-          </div>
-
-          <div className="card">
-            <h3>Context to Send</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-              <label className="checkbox_label">
-                <input
-                  type="checkbox"
-                  checked={settings.contextToSend.stDescription}
-                  onChange={(e) => updateContextToSend('stDescription', e.target.checked)}
-                />
-                Description of SillyTavern and Lorebook
-              </label>
-              {/* Message Options */}
-              {avatarKey != '_global' && (
-                <div className="message-options">
-                  <h4>Messages to Include</h4>
-                  <select
-                    className="text_pole"
-                    value={settings.contextToSend.messages.type}
-                    onChange={(e) =>
-                      updateContextToSend('messages', {
-                        ...settings.contextToSend.messages,
-                        type: e.target.value as any,
-                      })
-                    }
-                  >
-                    <option value="none">None</option>
-                    <option value="all">All Messages</option>
-                    <option value="first">First X Messages</option>
-                    <option value="last">Last X Messages</option>
-                    <option value="range">Range</option>
-                  </select>
-
-                  {settings.contextToSend.messages.type === 'first' && (
-                    <div style={{ marginTop: '10px' }}>
-                      <label>
-                        First{' '}
-                        <input
-                          type="number"
-                          className="text_pole small message-input"
-                          min="1"
-                          value={settings.contextToSend.messages.first ?? 10}
-                          onChange={(e) =>
-                            updateContextToSend('messages', {
-                              ...settings.contextToSend.messages,
-                              first: parseInt(e.target.value) || 10,
-                            })
-                          }
-                        />{' '}
-                        Messages
-                      </label>
-                    </div>
-                  )}
-                  {settings.contextToSend.messages.type === 'last' && (
-                    <div style={{ marginTop: '10px' }}>
-                      <label>
-                        Last{' '}
-                        <input
-                          type="number"
-                          className="text_pole small message-input"
-                          min="1"
-                          value={settings.contextToSend.messages.last ?? 10}
-                          onChange={(e) =>
-                            updateContextToSend('messages', {
-                              ...settings.contextToSend.messages,
-                              last: parseInt(e.target.value) || 10,
-                            })
-                          }
-                        />{' '}
-                        Messages
-                      </label>
-                    </div>
-                  )}
-                  {settings.contextToSend.messages.type === 'range' && (
-                    <div style={{ marginTop: '10px' }}>
-                      <label>
-                        Range:{' '}
-                        <input
-                          type="number"
-                          className="text_pole small message-input"
-                          min="0"
-                          placeholder="Start"
-                          value={settings.contextToSend.messages.range?.start ?? 0}
-                          onChange={(e) =>
-                            updateContextToSend('messages', {
-                              ...settings.contextToSend.messages,
-                              range: {
-                                ...settings.contextToSend.messages.range!,
-                                start: parseInt(e.target.value) || 0,
-                              },
-                            })
-                          }
-                        />{' '}
-                        to{' '}
-                        <input
-                          type="number"
-                          className="text_pole small message-input"
-                          min="1"
-                          placeholder="End"
-                          value={settings.contextToSend.messages.range?.end ?? 10}
-                          onChange={(e) =>
-                            updateContextToSend('messages', {
-                              ...settings.contextToSend.messages,
-                              range: { ...settings.contextToSend.messages.range!, end: parseInt(e.target.value) || 10 },
-                            })
-                          }
-                        />
-                      </label>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <label className="checkbox_label">
-                <input
-                  type="checkbox"
-                  checked={settings.contextToSend.charCard}
-                  onChange={(e) => updateContextToSend('charCard', e.target.checked)}
-                />
-                Char Card
-              </label>
-              {groupMembers.length > 0 && (
-                <div>
-                  <h4>Select Character</h4>
-                  <select className="text_pole" title="Select character for your group.">
-                    {groupMembers.map((member) => (
-                      <option key={member.avatar} value={member.avatar}>
-                        {member.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              <label className="checkbox_label">
-                <input
-                  type="checkbox"
-                  checked={settings.contextToSend.authorNote}
-                  onChange={(e) => updateContextToSend('authorNote', e.target.checked)}
-                />{' '}
-                Author Note
-              </label>
-              <label className="checkbox_label">
-                <input
-                  type="checkbox"
-                  checked={settings.contextToSend.worldInfo}
-                  onChange={(e) => updateContextToSend('worldInfo', e.target.checked)}
-                />{' '}
-                World Info
-              </label>
-              <div>
-                <h4>Lorebooks to Include</h4>
-                <STFancyDropdown
-                  items={worldInfoDropdownItems}
-                  value={session.selectedWorldNames}
-                  onChange={(newValues) => setSession((prev) => ({ ...prev, selectedWorldNames: newValues }))}
-                  multiple
-                  enableSearch
-                />
-              </div>
-              <label className="checkbox_label">
-                <input
-                  type="checkbox"
-                  checked={settings.contextToSend.suggestedEntries}
-                  onChange={(e) => updateContextToSend('suggestedEntries', e.target.checked)}
-                />{' '}
-                Existing Suggestions
-              </label>
+    <>
+      <div id="worldInfoRecommenderPopup">
+        <h2>World Info Recommender</h2>
+        <div className="container">
+          {/* Left Column */}
+          <div className="column">
+            <div className="card">
+              <h3>Connection Profile</h3>
+              <STConnectionProfileSelect
+                initialSelectedProfileId={settings.profileId}
+                // @ts-ignore
+                onChange={(profile) => updateSetting('profileId', profile?.id)}
+              />
             </div>
-          </div>
 
-          <div className="card">
-            <label>
-              Max Context
-              <select
-                className="text_pole"
-                title="Select Max Context Type"
-                value={settings.maxContextType}
-                onChange={(e) => updateSetting('maxContextType', e.target.value as any)}
-              >
-                <option value="profile">Use profile preset</option>
-                <option value="sampler">Use active preset in sampler settings</option>
-                <option value="custom">Custom</option>
-              </select>
-            </label>
+            <div className="card">
+              <h3>Context to Send</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                <label className="checkbox_label">
+                  <input
+                    type="checkbox"
+                    checked={settings.contextToSend.stDescription}
+                    onChange={(e) => updateContextToSend('stDescription', e.target.checked)}
+                  />
+                  Description of SillyTavern and Lorebook
+                </label>
+                {/* Message Options */}
+                {avatarKey != '_global' && (
+                  <div className="message-options">
+                    <h4>Messages to Include</h4>
+                    <select
+                      className="text_pole"
+                      value={settings.contextToSend.messages.type}
+                      onChange={(e) =>
+                        updateContextToSend('messages', {
+                          ...settings.contextToSend.messages,
+                          type: e.target.value as any,
+                        })
+                      }
+                    >
+                      <option value="none">None</option>
+                      <option value="all">All Messages</option>
+                      <option value="first">First X Messages</option>
+                      <option value="last">Last X Messages</option>
+                      <option value="range">Range</option>
+                    </select>
 
-            {settings.maxContextType === 'custom' && (
-              <label style={{ marginTop: '10px' }}>
+                    {settings.contextToSend.messages.type === 'first' && (
+                      <div style={{ marginTop: '10px' }}>
+                        <label>
+                          First{' '}
+                          <input
+                            type="number"
+                            className="text_pole small message-input"
+                            min="1"
+                            value={settings.contextToSend.messages.first ?? 10}
+                            onChange={(e) =>
+                              updateContextToSend('messages', {
+                                ...settings.contextToSend.messages,
+                                first: parseInt(e.target.value) || 10,
+                              })
+                            }
+                          />{' '}
+                          Messages
+                        </label>
+                      </div>
+                    )}
+                    {settings.contextToSend.messages.type === 'last' && (
+                      <div style={{ marginTop: '10px' }}>
+                        <label>
+                          Last{' '}
+                          <input
+                            type="number"
+                            className="text_pole small message-input"
+                            min="1"
+                            value={settings.contextToSend.messages.last ?? 10}
+                            onChange={(e) =>
+                              updateContextToSend('messages', {
+                                ...settings.contextToSend.messages,
+                                last: parseInt(e.target.value) || 10,
+                              })
+                            }
+                          />{' '}
+                          Messages
+                        </label>
+                      </div>
+                    )}
+                    {settings.contextToSend.messages.type === 'range' && (
+                      <div style={{ marginTop: '10px' }}>
+                        <label>
+                          Range:{' '}
+                          <input
+                            type="number"
+                            className="text_pole small message-input"
+                            min="0"
+                            placeholder="Start"
+                            value={settings.contextToSend.messages.range?.start ?? 0}
+                            onChange={(e) =>
+                              updateContextToSend('messages', {
+                                ...settings.contextToSend.messages,
+                                range: {
+                                  ...settings.contextToSend.messages.range!,
+                                  start: parseInt(e.target.value) || 0,
+                                },
+                              })
+                            }
+                          />{' '}
+                          to{' '}
+                          <input
+                            type="number"
+                            className="text_pole small message-input"
+                            min="1"
+                            placeholder="End"
+                            value={settings.contextToSend.messages.range?.end ?? 10}
+                            onChange={(e) =>
+                              updateContextToSend('messages', {
+                                ...settings.contextToSend.messages,
+                                range: {
+                                  ...settings.contextToSend.messages.range!,
+                                  end: parseInt(e.target.value) || 10,
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <label className="checkbox_label">
+                  <input
+                    type="checkbox"
+                    checked={settings.contextToSend.charCard}
+                    onChange={(e) => updateContextToSend('charCard', e.target.checked)}
+                  />
+                  Char Card
+                </label>
+                {groupMembers.length > 0 && (
+                  <div>
+                    <h4>Select Character</h4>
+                    <select className="text_pole" title="Select character for your group.">
+                      {groupMembers.map((member) => (
+                        <option key={member.avatar} value={member.avatar}>
+                          {member.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <label className="checkbox_label">
+                  <input
+                    type="checkbox"
+                    checked={settings.contextToSend.authorNote}
+                    onChange={(e) => updateContextToSend('authorNote', e.target.checked)}
+                  />{' '}
+                  Author Note
+                </label>
+                <label className="checkbox_label">
+                  <input
+                    type="checkbox"
+                    checked={settings.contextToSend.worldInfo}
+                    onChange={(e) => updateContextToSend('worldInfo', e.target.checked)}
+                  />{' '}
+                  World Info
+                </label>
+                <div>
+                  <h4>Lorebooks to Include</h4>
+                  <STFancyDropdown
+                    items={worldInfoDropdownItems}
+                    value={session.selectedWorldNames}
+                    onChange={(newValues) => {
+                      setSession((prev) => {
+                        const newSelectedEntryUids = { ...prev.selectedEntryUids };
+                        const removedWorlds = prev.selectedWorldNames.filter((w) => !newValues.includes(w));
+                        removedWorlds.forEach((w) => delete newSelectedEntryUids[w]);
+                        return { ...prev, selectedWorldNames: newValues, selectedEntryUids: newSelectedEntryUids };
+                      });
+                    }}
+                    multiple
+                    enableSearch
+                  />
+                </div>
+                {session.selectedWorldNames.length > 0 && (
+                  <div className="entry-selection-control">
+                    <STButton
+                      className="menu_button"
+                      onClick={() => setIsSelectingEntries(true)}
+                      title="Select specific entries from the chosen lorebooks"
+                    >
+                      <i className="fa-solid fa-list-check"></i>
+                      Select Entries
+                    </STButton>
+                    <span>
+                      {totalSelectedEntries > 0 ? `${totalSelectedEntries} selected` : 'All entries included'}
+                    </span>
+                  </div>
+                )}
+                <label className="checkbox_label">
+                  <input
+                    type="checkbox"
+                    checked={settings.contextToSend.suggestedEntries}
+                    onChange={(e) => updateContextToSend('suggestedEntries', e.target.checked)}
+                  />{' '}
+                  Existing Suggestions
+                </label>
+              </div>
+            </div>
+
+            <div className="card">
+              <label>
+                Max Context
+                <select
+                  className="text_pole"
+                  title="Select Max Context Type"
+                  value={settings.maxContextType}
+                  onChange={(e) => updateSetting('maxContextType', e.target.value as any)}
+                >
+                  <option value="profile">Use profile preset</option>
+                  <option value="sampler">Use active preset in sampler settings</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </label>
+
+              {settings.maxContextType === 'custom' && (
+                <label style={{ marginTop: '10px' }}>
+                  <input
+                    type="number"
+                    className="text_pole"
+                    min="1"
+                    step="1"
+                    placeholder="Enter max tokens"
+                    value={settings.maxContextValue}
+                    onChange={(e) => updateSetting('maxContextValue', parseInt(e.target.value) || 2048)}
+                  />
+                </label>
+              )}
+
+              <label style={{ display: 'block', marginTop: '10px' }}>
+                Max Response Tokens
                 <input
                   type="number"
                   className="text_pole"
                   min="1"
                   step="1"
-                  placeholder="Enter max tokens"
-                  value={settings.maxContextValue}
-                  onChange={(e) => updateSetting('maxContextValue', parseInt(e.target.value) || 2048)}
+                  placeholder="Enter max response tokens"
+                  value={settings.maxResponseToken}
+                  onChange={(e) => updateSetting('maxResponseToken', parseInt(e.target.value) || 256)}
                 />
               </label>
-            )}
+            </div>
 
-            <label style={{ display: 'block', marginTop: '10px' }}>
-              Max Response Tokens
-              <input
-                type="number"
-                className="text_pole"
-                min="1"
-                step="1"
-                placeholder="Enter max response tokens"
-                value={settings.maxResponseToken}
-                onChange={(e) => updateSetting('maxResponseToken', parseInt(e.target.value) || 256)}
-              />
-            </label>
-          </div>
-
-          <div className="card">
-            <h3>Your Prompt</h3>
-            <STPresetSelect
-              label="Prompt Preset"
-              items={promptPresetItems}
-              value={settings.promptPreset}
-              readOnlyValues={['default']}
-              onChange={(newValue) => updateSetting('promptPreset', newValue ?? 'default')}
-              onItemsChange={(newItems) => {
-                const newPresets = newItems.reduce(
-                  (acc, item) => {
-                    acc[item.value] = settings.promptPresets[item.value] ?? { content: '' };
-                    return acc;
-                  },
-                  {} as Record<string, { content: string }>,
-                );
-                updateSetting('promptPresets', newPresets);
-              }}
-              enableCreate
-              enableRename
-              enableDelete
-            />
-            <STTextarea
-              value={settings.promptPresets[settings.promptPreset]?.content ?? ''}
-              onChange={(e) => {
-                const newPresets = { ...settings.promptPresets };
-                if (newPresets[settings.promptPreset]) {
-                  newPresets[settings.promptPreset].content = e.target.value;
+            <div className="card">
+              <h3>Your Prompt</h3>
+              <STPresetSelect
+                label="Prompt Preset"
+                items={promptPresetItems}
+                value={settings.promptPreset}
+                readOnlyValues={['default']}
+                onChange={(newValue) => updateSetting('promptPreset', newValue ?? 'default')}
+                onItemsChange={(newItems) => {
+                  const newPresets = newItems.reduce(
+                    (acc, item) => {
+                      acc[item.value] = settings.promptPresets[item.value] ?? { content: '' };
+                      return acc;
+                    },
+                    {} as Record<string, { content: string }>,
+                  );
                   updateSetting('promptPresets', newPresets);
-                }
-              }}
-              placeholder="e.g., 'Suggest entries for places {{user}} visited.'"
-              rows={4}
-              style={{ marginTop: '5px', width: '100%' }}
-            />
-            <STButton
-              onClick={() => handleGeneration()}
-              disabled={isGenerating}
-              className="menu_button interactable"
-              style={{ marginTop: '5px' }}
-            >
-              {isGenerating ? 'Generating...' : 'Send Prompt'}
-            </STButton>
-          </div>
-        </div>
-
-        {/* Right Column */}
-        <div className="wide-column">
-          <div className="card">
-            <h3>Suggested Entries</h3>
-            <div className="actions">
+                }}
+                enableCreate
+                enableRename
+                enableDelete
+              />
+              <STTextarea
+                value={settings.promptPresets[settings.promptPreset]?.content ?? ''}
+                onChange={(e) => {
+                  const newPresets = { ...settings.promptPresets };
+                  if (newPresets[settings.promptPreset]) {
+                    newPresets[settings.promptPreset].content = e.target.value;
+                    updateSetting('promptPresets', newPresets);
+                  }
+                }}
+                placeholder="e.g., 'Suggest entries for places {{user}} visited.'"
+                rows={4}
+                style={{ marginTop: '5px', width: '100%' }}
+              />
               <STButton
-                onClick={handleAddAll}
-                disabled={isGenerating || suggestedEntriesList.length === 0}
+                onClick={() => handleGeneration()}
+                disabled={isGenerating}
                 className="menu_button interactable"
+                style={{ marginTop: '5px' }}
               >
-                Add All
-              </STButton>
-              <STButton onClick={handleReset} disabled={isGenerating} className="menu_button interactable">
-                Reset
+                {isGenerating ? 'Generating...' : 'Send Prompt'}
               </STButton>
             </div>
-            <div>
-              {suggestedEntriesList.length === 0 && <p>No suggestions yet. Send a prompt to get started!</p>}
-              {suggestedEntriesList.map(({ worldName, entry }) => (
-                <SuggestedEntry
-                  key={`${worldName}-${entry.uid}-${entry.comment}`}
-                  initialWorldName={worldName}
-                  entry={entry}
-                  allWorldNames={allWorldNames}
-                  existingEntry={entriesGroupByWorldName[worldName]?.find((e) => e.uid === entry.uid)}
-                  sessionRegexIds={session.regexIds}
-                  onAdd={handleAddSingleEntry}
-                  onRemove={handleRemoveEntry}
-                  onContinue={handleGeneration}
-                  onUpdate={handleUpdateEntry}
-                  entriesGroupByWorldName={entriesGroupByWorldName}
-                />
-              ))}
+          </div>
+
+          {/* Right Column */}
+          <div className="wide-column">
+            <div className="card">
+              <h3>Suggested Entries</h3>
+              <div className="actions">
+                <STButton
+                  onClick={handleAddAll}
+                  disabled={isGenerating || suggestedEntriesList.length === 0}
+                  className="menu_button interactable"
+                >
+                  Add All
+                </STButton>
+                <STButton onClick={handleReset} disabled={isGenerating} className="menu_button interactable">
+                  Reset
+                </STButton>
+              </div>
+              <div>
+                {suggestedEntriesList.length === 0 && <p>No suggestions yet. Send a prompt to get started!</p>}
+                {suggestedEntriesList.map(({ worldName, entry }) => (
+                  <SuggestedEntry
+                    key={`${worldName}-${entry.uid}-${entry.comment}`}
+                    initialWorldName={worldName}
+                    entry={entry}
+                    allWorldNames={allWorldNames}
+                    existingEntry={entriesGroupByWorldName[worldName]?.find((e) => e.uid === entry.uid)}
+                    sessionRegexIds={session.regexIds}
+                    onAdd={handleAddSingleEntry}
+                    onRemove={handleRemoveEntry}
+                    onContinue={handleGeneration}
+                    onUpdate={handleUpdateEntry}
+                    entriesGroupByWorldName={entriesGroupByWorldName}
+                  />
+                ))}
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+      {isSelectingEntries && (
+        <Popup
+          type={POPUP_TYPE.CONFIRM}
+          content={
+            <SelectEntriesPopup
+              ref={selectEntriesPopupRef}
+              entriesByWorldName={entriesForSelectionPopup}
+              initialSelectedUids={session.selectedEntryUids}
+            />
+          }
+          onComplete={(confirmed) => {
+            if (confirmed && selectEntriesPopupRef.current) {
+              const newSelection = selectEntriesPopupRef.current.getSelection();
+              setSession((prev) => ({ ...prev, selectedEntryUids: newSelection }));
+            }
+            setIsSelectingEntries(false);
+          }}
+          options={{ wide: true }}
+        />
+      )}
+    </>
   );
 };

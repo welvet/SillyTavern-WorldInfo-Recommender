@@ -33,6 +33,16 @@ dialog:has(.compare-popup) {
   min-width: var(--sheldWidth);
 }
 
+.popup-content:has(.select-entries-popup) {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+dialog:has(.select-entries-popup) {
+  min-width: 600px;
+}
+
 #worldInfoRecommenderPopup {
   color: var(--SmartThemeBodyColor);
   font-family: var(--mainFontFamily);
@@ -95,6 +105,24 @@ dialog:has(.compare-popup) {
   width: 50px;
   margin-left: 5px;
   margin-right: 5px;
+}
+#worldInfoRecommenderPopup .entry-selection-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+#worldInfoRecommenderPopup .entry-selection-control .menu_button {
+  padding: 5px 10px;
+  font-size: 0.9em;
+}
+#worldInfoRecommenderPopup .entry-selection-control .menu_button i {
+  margin-right: 5px;
+}
+#worldInfoRecommenderPopup .entry-selection-control span {
+  font-size: 0.9em;
+  color: var(--SmartThemeBodyColor);
+  opacity: 0.8;
 }
 #worldInfoRecommenderPopup .entry {
   background-color: var(--grey10);
@@ -229,4 +257,56 @@ dialog:has(.compare-popup) {
 }
 #worldInfoRecommenderPopup .compare-popup .content span[style*="color: grey"] {
   color: var(--SmartThemeBodyColor) !important;
+}
+
+.select-entries-popup {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  padding: 10px;
+  height: 100%;
+}
+.select-entries-popup h3 {
+  margin-top: 0;
+  text-align: center;
+}
+.select-entries-popup .controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.select-entries-popup .controls .text_pole {
+  flex-grow: 1;
+}
+.select-entries-popup .entry-list {
+  flex-grow: 1;
+  overflow-y: auto;
+  border: 1px solid var(--SmartThemeBorderColor);
+  border-radius: 8px;
+  padding: 10px;
+  background-color: var(--SmartThemeChatBGColor);
+}
+.select-entries-popup .world-group {
+  margin-bottom: 15px;
+}
+.select-entries-popup .world-group h4 {
+  margin: 0 0 8px 0;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--SmartThemeBorderColor);
+  color: var(--SmartThemeEmColor);
+}
+.select-entries-popup .world-group ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.select-entries-popup .world-group li {
+  margin-bottom: 5px;
+}
+.select-entries-popup .world-group li label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
 }
