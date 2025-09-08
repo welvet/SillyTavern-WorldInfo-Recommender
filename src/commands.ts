@@ -394,6 +394,7 @@ export function initializeCommands() {
             suggestedEntries: {}, // Start with no pre-existing suggestions
             blackListedEntries: [], // Start with no blacklist
             regexIds: {}, // Start with no regexes
+            selectedEntryUids: {},
           };
 
           const parsedMaxResponse = namedArgs['max-response'] ? parseInt(namedArgs['max-response']) : undefined;
