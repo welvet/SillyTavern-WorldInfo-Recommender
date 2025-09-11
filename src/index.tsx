@@ -4,12 +4,12 @@ import { extensionName, initializeSettings } from './settings.js';
 import { WorldInfoRecommenderSettings } from './components/Settings.js';
 import { st_echo } from 'sillytavern-utils-lib/config';
 import { PopupManager } from './components/PopupManager.js';
+import { initializeCommands } from './commands.js';
 
 const globalContext = SillyTavern.getContext();
 
 export async function init() {
   // --- Settings Panel Rendering ---
-  // (This part was already correct)
   const settingsHtml: string = await globalContext.renderExtensionTemplateAsync(
     `third-party/${extensionName}`,
     'templates/settings',
@@ -86,5 +86,6 @@ if (!importCheck()) {
 } else {
   initializeSettings().then(() => {
     init();
+    initializeCommands();
   });
 }
