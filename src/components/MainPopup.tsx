@@ -64,8 +64,10 @@ export const MainPopup: FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSelectingEntries, setIsSelectingEntries] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
 
   const selectEntriesPopupRef = useRef<SelectEntriesPopupRef>(null);
+  const importPopupRef = useRef<SelectEntriesPopupRef>(null);
 
   const avatarKey = useMemo(() => getAvatar() ?? '_global', [this_chid, selected_group]);
 
@@ -506,6 +508,39 @@ export const MainPopup: FC = () => {
     });
   };
 
+  const handleImportEntries = useCallback(
+    (selection: Record<string, number[]>) => {
+      setSession((prev) => {
+        const newSuggested = structuredClone(prev.suggestedEntries);
+        let importCount = 0;
+
+        for (const [worldName, uids] of Object.entries(selection)) {
+          if (!entriesGroupByWorldName[worldName]) continue;
+          if (!newSuggested[worldName]) {
+            newSuggested[worldName] = [];
+          }
+
+          for (const uid of uids) {
+            // Check if already in suggestions for that world
+            const alreadySuggested = newSuggested[worldName].some((e) => e.uid === uid);
+            if (alreadySuggested) continue;
+
+            const entryToImport = entriesGroupByWorldName[worldName].find((e) => e.uid === uid);
+            if (entryToImport) {
+              newSuggested[worldName].push(structuredClone(entryToImport));
+              importCount++;
+            }
+          }
+        }
+        if (importCount > 0) {
+          st_echo('success', `Imported ${importCount} entries for revision.`);
+        }
+        return { ...prev, suggestedEntries: newSuggested };
+      });
+    },
+    [entriesGroupByWorldName],
+  );
+
   const entriesForSelectionPopup = useMemo(() => {
     const result: Record<string, WIEntry[]> = {};
     session.selectedWorldNames.forEach((worldName) => {
@@ -836,6 +871,14 @@ export const MainPopup: FC = () => {
                 >
                   Add All
                 </STButton>
+                <STButton
+                  onClick={() => setIsImporting(true)}
+                  disabled={isGenerating}
+                  className="menu_button interactable"
+                  title="Import existing entries to continue/revise them"
+                >
+                  Import Entry
+                </STButton>
                 <STButton onClick={handleReset} disabled={isGenerating} className="menu_button interactable">
                   Reset
                 </STButton>
@@ -870,6 +913,7 @@ export const MainPopup: FC = () => {
               ref={selectEntriesPopupRef}
               entriesByWorldName={entriesForSelectionPopup}
               initialSelectedUids={session.selectedEntryUids}
+              title="Select Entries to Include in Context"
             />
           }
           onComplete={(confirmed) => {
@@ -878,6 +922,27 @@ export const MainPopup: FC = () => {
               setSession((prev) => ({ ...prev, selectedEntryUids: newSelection }));
             }
             setIsSelectingEntries(false);
+          }}
+          options={{ wide: true }}
+        />
+      )}
+      {isImporting && (
+        <Popup
+          type={POPUP_TYPE.CONFIRM}
+          content={
+            <SelectEntriesPopup
+              ref={importPopupRef}
+              entriesByWorldName={entriesGroupByWorldName}
+              initialSelectedUids={{}}
+              title="Select Entries to Import for Revision"
+            />
+          }
+          onComplete={(confirmed) => {
+            if (confirmed && importPopupRef.current) {
+              const selection = importPopupRef.current.getSelection();
+              handleImportEntries(selection);
+            }
+            setIsImporting(false);
           }}
           options={{ wide: true }}
         />
