@@ -26,6 +26,12 @@ export const PopupManager = () => {
       options={{
         large: true,
         wide: true,
+        customButtons: [
+          {
+            text: 'Close',
+            action: closePopup,
+          },
+        ],
       }}
     />
   );
