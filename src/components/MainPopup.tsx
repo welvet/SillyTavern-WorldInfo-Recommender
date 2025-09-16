@@ -32,6 +32,10 @@ import { useForceUpdate } from '../hooks/useForceUpdate.js';
 import { SelectEntriesPopup, SelectEntriesPopupRef } from './SelectEntriesPopup.js';
 import { POPUP_TYPE } from 'sillytavern-utils-lib/types/popup';
 
+interface MainPopupProps {
+  onClose: () => void;
+}
+
 if (!Handlebars.helpers['join']) {
   Handlebars.registerHelper('join', function (array: any, separator: any) {
     return array.join(separator);
@@ -47,7 +51,7 @@ const getAvatar = () => (this_chid ? st_getCharaFilename(this_chid) : selected_g
  * A React component for the main World Info Recommender popup UI.
  * This component replaces the vanilla TS popup script.
  */
-export const MainPopup: FC = () => {
+export const MainPopup: FC<MainPopupProps> = ({ onClose }) => {
   // --- State Management ---
   const forceUpdate = useForceUpdate();
   const settings = settingsManager.getSettings();
@@ -333,7 +337,7 @@ export const MainPopup: FC = () => {
 
         if (Object.keys(resultingEntries).length > 0) {
           if (continueFrom) {
-            setSession((prev) => {
+            setSession((prev: Session) => {
               const newSuggested = structuredClone(prev.suggestedEntries);
               const worldName = continueFrom.worldName;
               const updatedEntry = resultingEntries[worldName]?.[0];
@@ -351,7 +355,7 @@ export const MainPopup: FC = () => {
               return { ...prev, suggestedEntries: newSuggested };
             });
           } else {
-            setSession((prev) => {
+            setSession((prev: Session) => {
               const newSuggested = structuredClone(prev.suggestedEntries);
               for (const [worldName, entries] of Object.entries(resultingEntries)) {
                 if (!newSuggested[worldName]) newSuggested[worldName] = [];
@@ -385,7 +389,7 @@ export const MainPopup: FC = () => {
         const status = await addEntry(entry, selectedTargetWorld);
         st_echo('success', status === 'added' ? 'Entry added' : 'Entry updated');
         // Remove from suggested list
-        setSession((prev) => {
+        setSession((prev: Session) => {
           const newSuggested = { ...prev.suggestedEntries };
           if (newSuggested[worldName]) {
             newSuggested[worldName] = newSuggested[worldName].filter(
@@ -446,7 +450,7 @@ export const MainPopup: FC = () => {
       }
     }
 
-    setSession((prev) => ({ ...prev, suggestedEntries: {} }));
+    setSession((prev: Session) => ({ ...prev, suggestedEntries: {} }));
     st_echo('success', `Processed ${addedCount} new and ${updatedCount} updated entries.`);
     setIsGenerating(false);
   };
@@ -457,7 +461,7 @@ export const MainPopup: FC = () => {
       'Clear all suggestions and reset lorebook selection?',
     );
     if (confirm) {
-      setSession((prev) => ({
+      setSession((prev: Session) => ({
         ...prev,
         suggestedEntries: {},
         blackListedEntries: [],
@@ -469,7 +473,7 @@ export const MainPopup: FC = () => {
   };
 
   const handleRemoveEntry = (entry: WIEntry, worldName: string, isBlacklist: boolean) => {
-    setSession((prev) => {
+    setSession((prev: Session) => {
       const newSession = { ...prev };
       if (isBlacklist) {
         newSession.blackListedEntries = [...newSession.blackListedEntries, `${worldName} (${entry.comment})`];
@@ -491,7 +495,7 @@ export const MainPopup: FC = () => {
     updatedEntry: WIEntry,
     updatedRegexIds: Record<string, Partial<RegexScriptData>>,
   ) => {
-    setSession((prev) => {
+    setSession((prev: Session) => {
       const newSuggested = { ...prev.suggestedEntries };
       if (newSuggested[worldName]) {
         // Use the ORIGINAL entry's comment and uid to find the correct item
@@ -510,7 +514,7 @@ export const MainPopup: FC = () => {
 
   const handleImportEntries = useCallback(
     (selection: Record<string, number[]>) => {
-      setSession((prev) => {
+      setSession((prev: Session) => {
         const newSuggested = structuredClone(prev.suggestedEntries);
         let importCount = 0;
 
@@ -856,6 +860,9 @@ export const MainPopup: FC = () => {
               >
                 {isGenerating ? 'Generating...' : 'Send Prompt'}
               </STButton>
+              <STButton onClick={onClose} className="menu_button interactable" style={{ marginTop: '5px' }}>
+                Close
+              </STButton>
             </div>
           </div>
 
@@ -891,7 +898,7 @@ export const MainPopup: FC = () => {
                     initialWorldName={worldName}
                     entry={entry}
                     allWorldNames={allWorldNames}
-                    existingEntry={entriesGroupByWorldName[worldName]?.find((e) => e.uid === entry.uid)}
+                    existingEntry={entriesGroupByWorldName[worldName]?.find((e: WIEntry) => e.uid === entry.uid)}
                     sessionRegexIds={session.regexIds}
                     onAdd={handleAddSingleEntry}
                     onRemove={handleRemoveEntry}
@@ -916,10 +923,10 @@ export const MainPopup: FC = () => {
               title="Select Entries to Include in Context"
             />
           }
-          onComplete={(confirmed) => {
+          onComplete={(confirmed: boolean) => {
             if (confirmed && selectEntriesPopupRef.current) {
               const newSelection = selectEntriesPopupRef.current.getSelection();
-              setSession((prev) => ({ ...prev, selectedEntryUids: newSelection }));
+              setSession((prev: Session) => ({ ...prev, selectedEntryUids: newSelection }));
             }
             setIsSelectingEntries(false);
           }}
@@ -937,7 +944,7 @@ export const MainPopup: FC = () => {
               title="Select Entries to Import for Revision"
             />
           }
-          onComplete={(confirmed) => {
+          onComplete={(confirmed: boolean) => {
             if (confirmed && importPopupRef.current) {
               const selection = importPopupRef.current.getSelection();
               handleImportEntries(selection);
