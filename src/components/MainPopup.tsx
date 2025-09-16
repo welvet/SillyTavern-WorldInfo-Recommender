@@ -44,10 +44,18 @@ const globalContext = SillyTavern.getContext();
 const getAvatar = () => (this_chid ? st_getCharaFilename(this_chid) : selected_group);
 
 /**
+ * The props for the MainPopup component.
+ */
+interface MainPopupProps {
+  onClose: () => void;
+}
+
+
+/**
  * A React component for the main World Info Recommender popup UI.
  * This component replaces the vanilla TS popup script.
  */
-export const MainPopup: FC = () => {
+export const MainPopup: FC<MainPopupProps> = ({ onClose }) => {
   // --- State Management ---
   const forceUpdate = useForceUpdate();
   const settings = settingsManager.getSettings();
@@ -855,6 +863,13 @@ export const MainPopup: FC = () => {
                 style={{ marginTop: '5px' }}
               >
                 {isGenerating ? 'Generating...' : 'Send Prompt'}
+              </STButton>
+              <STButton
+                onClick={onClose}
+                className="menu_button interactable"
+                style={{ marginTop: '5px' }}
+              >
+                Close
               </STButton>
             </div>
           </div>
