@@ -235,7 +235,15 @@ export const MainPopup: FC<MainPopupProps> = ({ onClose }) => {
         worldInfoCopy[selectedWorldName].push(targetEntry);
       }
 
-      Object.assign(targetEntry, { key: entry.key, content: entry.content, comment: entry.comment });
+      Object.assign(targetEntry, {
+        key: entry.key,
+        content: `# ${entry.comment}\n\n${entry.content
+          .split('\n')
+          .map((line) => line.trim())
+          .join('\n')}`,
+        comment: entry.comment,
+        constant: true,
+      });
       setEntriesGroupByWorldName(worldInfoCopy);
 
       if (!skipSave) {
@@ -409,55 +417,6 @@ export const MainPopup: FC<MainPopupProps> = ({ onClose }) => {
     },
     [addEntry],
   );
-
-  const handleAddAll = async () => {
-    const totalEntries = Object.values(session.suggestedEntries).flat().length;
-    if (totalEntries === 0) return st_echo('warning', 'No entries to add.');
-
-    const confirm = await globalContext.Popup.show.confirm(
-      'Add All',
-      `Are you sure you want to add/update all ${totalEntries} suggested entries?`,
-    );
-    if (!confirm) return;
-
-    setIsGenerating(true);
-    let addedCount = 0;
-    let updatedCount = 0;
-    const modifiedWorlds = new Set<string>();
-    const entriesToAdd: { worldName: string; entry: WIEntry }[] = [];
-
-    Object.entries(session.suggestedEntries).forEach(([worldName, entries]) => {
-      entries.forEach((entry) => {
-        const targetWorldName = allWorldNames.includes(worldName) ? worldName : (allWorldNames[0] ?? '');
-        if (targetWorldName) entriesToAdd.push({ worldName: targetWorldName, entry });
-      });
-    });
-
-    for (const { worldName, entry } of entriesToAdd) {
-      try {
-        const status = await addEntry(entry, worldName, true);
-        if (status === 'added') addedCount++;
-        else updatedCount++;
-        modifiedWorlds.add(worldName);
-      } catch (error) {
-        st_echo('error', `Failed to process entry: ${entry.comment}`);
-      }
-    }
-
-    for (const worldName of modifiedWorlds) {
-      try {
-        const finalFormat = { entries: Object.fromEntries(entriesGroupByWorldName[worldName].map((e) => [e.uid, e])) };
-        await globalContext.saveWorldInfo(worldName, finalFormat);
-        globalContext.reloadWorldInfoEditor(worldName, true);
-      } catch (error) {
-        st_echo('error', `Failed to save world: ${worldName}`);
-      }
-    }
-
-    setSession((prev) => ({ ...prev, suggestedEntries: {} }));
-    st_echo('success', `Processed ${addedCount} new and ${updatedCount} updated entries.`);
-    setIsGenerating(false);
-  };
 
   const handleReset = async () => {
     const confirm = await globalContext.Popup.show.confirm(
@@ -879,13 +838,6 @@ export const MainPopup: FC<MainPopupProps> = ({ onClose }) => {
             <div className="card">
               <h3>Suggested Entries</h3>
               <div className="actions">
-                <STButton
-                  onClick={handleAddAll}
-                  disabled={isGenerating || suggestedEntriesList.length === 0}
-                  className="menu_button interactable"
-                >
-                  Add All
-                </STButton>
                 <STButton
                   onClick={() => setIsImporting(true)}
                   disabled={isGenerating}
