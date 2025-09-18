@@ -231,7 +231,14 @@ export const MainPopup: FC<MainPopupProps> = ({ onClose }) => {
         const stFormat = { entries: Object.fromEntries(worldInfoCopy[selectedWorldName].map((e) => [e.uid, e])) };
         const newEntry = st_createWorldInfoEntry(selectedWorldName, stFormat);
         if (!newEntry) throw new Error('Failed to create new World Info entry.');
-        targetEntry = newEntry;
+        targetEntry = newEntry;      
+        if (worldInfoCopy[selectedWorldName].length > 0) {        
+          //@ts-ignore
+          const maxOrder = Math.max(...worldInfoCopy[selectedWorldName].map((e) => e.order ?? 0));
+          console.log('New max order:', maxOrder);
+          //@ts-ignore
+          targetEntry.order = maxOrder + 1;
+        }
         worldInfoCopy[selectedWorldName].push(targetEntry);
       }
 
